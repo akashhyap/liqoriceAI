@@ -17,15 +17,19 @@
 **/dist
 /out/
 
-# Testing
-/coverage
-
-# Debug logs
+# Logs
+**/logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-**/logs
-*.log
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Testing
+/coverage
+*.lcov
+.nyc_output
 
 # IDE and editor files
 .idea/
@@ -33,43 +37,36 @@ yarn-error.log*
 *.swp
 *.swo
 .DS_Store
-*.sublime-project
 *.sublime-workspace
+*.sublime-project
 
-# Frontend specific
-/frontend/.cache
-/frontend/build
-/frontend/.env
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
 
-# Backend specific
-/backend/dist
-/backend/uploads/*
-!/backend/uploads/.gitkeep
-/backend/.env
+# Dependency directories
+jspm_packages/
+web_modules/
 
-# TypeScript
+# TypeScript cache
 *.tsbuildinfo
-
-# Misc
-.DS_Store
-*.pem
-.cache
-.temp
-*.bak
-*.tmp
-
-# Production
-/build
-
-# Prisma
-/prisma/*.db
-/prisma/migrations/
 
 # Optional npm cache directory
 .npm
 
 # Optional eslint cache
 .eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
 
 # Optional REPL history
 .node_repl_history
@@ -79,3 +76,23 @@ yarn-error.log*
 
 # Yarn Integrity file
 .yarn-integrity
+
+# Prisma
+**/prisma/migrations/
+**/prisma/*.db
+**/prisma/.env
+
+# Next.js
+.next/
+out/
+
+# Production
+/build
+/dist
+
+# Misc
+*.pem
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
