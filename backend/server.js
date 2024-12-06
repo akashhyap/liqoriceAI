@@ -27,22 +27,18 @@ const server = createServer(app);
 // Middleware
 app.use(cors({
     origin: function(origin, callback) {
+        const allowedOrigins = [
+            'http://localhost:3001',
+            'https://liqorice-frontend.onrender.com', 
+            process.env.FRONTEND_URL 
+        ];
+        
         // allow requests with no origin (like mobile apps or curl requests)
         if(!origin) return callback(null, true);
         
-        const allowedOrigins = [
-            'http://localhost:3000',
-            'http://localhost:3001',
-            'http://127.0.0.1:3000',
-            'http://127.0.0.1:3001',
-            'http://127.0.0.1:5500',  
-            'http://localhost:5500',
-            'null'  
-        ];
-        
-        if (allowedOrigins.indexOf(origin) === -1) {
-            console.log('Blocked origin:', origin);
-            return callback(new Error('CORS policy violation'), false);
+        if(allowedOrigins.indexOf(origin) === -1){
+            var msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+            return callback(new Error(msg), false);
         }
         return callback(null, true);
     },

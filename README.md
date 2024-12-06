@@ -74,8 +74,8 @@ FastBots is a powerful AI-powered chatbot platform that allows businesses to cre
 
 1. Clone the repository:
 ```bash
-git clone [repository-url]
-cd liqorice
+git clone https://github.com/akashhyap/liqoriceAI.git
+cd liqoriceAI
 ```
 
 2. Set up environment variables:
