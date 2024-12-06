@@ -501,3 +501,9 @@
 {"level":"info","message":{"duration":"135ms","method":"GET","status":200,"url":"/674efcc66088e5fd6bc83ce7/training"},"timestamp":"2024-12-06T06:03:14.206Z"}
 {"level":"info","message":{"duration":"141ms","method":"GET","status":304,"url":"/674efcc66088e5fd6bc83ce7"},"timestamp":"2024-12-06T06:03:14.351Z"}
 {"level":"info","message":{"duration":"144ms","method":"GET","status":304,"url":"/674efcc66088e5fd6bc83ce7/training"},"timestamp":"2024-12-06T06:03:14.361Z"}
+{"level":"info","message":{"duration":"339ms","method":"GET","status":304,"url":"/me"},"timestamp":"2024-12-06T07:23:07.628Z"}
+{"level":"info","message":{"duration":"154ms","method":"GET","status":304,"url":"/me"},"timestamp":"2024-12-06T07:23:07.807Z"}
+{"level":"info","message":{"duration":"167ms","method":"GET","status":304,"url":"/674efcc66088e5fd6bc83ce7"},"timestamp":"2024-12-06T07:23:08.076Z"}
+{"level":"info","message":{"duration":"181ms","method":"GET","status":304,"url":"/674efcc66088e5fd6bc83ce7/training"},"timestamp":"2024-12-06T07:23:08.103Z"}
+{"level":"info","message":{"duration":"158ms","method":"GET","status":304,"url":"/674efcc66088e5fd6bc83ce7"},"timestamp":"2024-12-06T07:23:08.240Z"}
+{"level":"info","message":{"duration":"167ms","method":"GET","status":304,"url":"/674efcc66088e5fd6bc83ce7/training"},"timestamp":"2024-12-06T07:23:08.278Z"}

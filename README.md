@@ -96,6 +96,7 @@ STRIPE_SECRET_KEY=your_stripe_secret
 ```
 REACT_APP_API_URL=http://localhost:8000
 REACT_APP_STRIPE_PUBLIC_KEY=your_stripe_public_key
+PORT=3001
 ```
 
 ### Installation
@@ -126,7 +127,7 @@ cd frontend
 npm start
 ```
 
-The application will be available at `http://localhost:3000`
+The application will be available at `http://localhost:3001`
 
 ## Project Structure
 
