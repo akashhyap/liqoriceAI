@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "d:\\Office\\Project\\AI-Saas\\fastbots\\backend\\logs\\.4724377ceb4255b612ffbc2ce5f5d7b7bd3471d5-audit.json",
+    "files": [
+        {
+            "date": 1732456159072,
+            "name": "d:\\Office\\Project\\AI-Saas\\fastbots\\backend\\logs\\error-2024-11-24.log",
+            "hash": "4d55985b375cc00fd6e738bbd1e7f4886312f912c5f9d53a0027e45c88760a2e"
+        }
+    ],
+    "hashType": "sha256"
+}
