@@ -5,6 +5,8 @@ import { Pinecone } from '@pinecone-database/pinecone';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { StringOutputParser } from "@langchain/core/output_parsers";
 import Chatbot from '../models/Chatbot.js';
+import documentService from './documentService.js';
+import websiteTrainingService from './websiteTrainingService.js';
 
 class ChatService {
     constructor() {
@@ -39,8 +41,11 @@ class ChatService {
         try {
             console.log('Starting generateResponse for chatbot:', chatbot._id);
             
-            // Check if chatbot has any training data
-            if (!chatbot.training.totalChunks) {
+            // Check training status from both documents and websites
+            const trainingStatus = await documentService.getNamespaceStats(chatbot._id);
+            console.log('Training status:', trainingStatus);
+            
+            if (!trainingStatus?.vectorCount) {
                 return {
                     response: "I haven't been trained with any data yet. Please add some training data first.",
                     sources: []
@@ -55,37 +60,85 @@ class ChatService {
             });
             console.log('Embeddings initialized');
 
-            // Initialize vector store for this chatbot's namespace
-            const pineconeIndex = this.pinecone.Index(process.env.PINECONE_INDEX);
-            const vectorStore = await PineconeStore.fromExistingIndex(embeddings, {
-                pineconeIndex,
-                namespace: chatbot._id.toString()
+            // Initialize vector store with correct index format
+            const pineconeIndex = this.pinecone.index(process.env.PINECONE_INDEX);
+            
+            // Query directly using Pinecone
+            const queryEmbedding = await embeddings.embedQuery(message);
+            const queryFilter = {
+                chatbotId: chatbot._id.toString()
+            };
+            
+            console.log('Querying Pinecone:', {
+                chatbotId: chatbot._id.toString(),
+                filter: queryFilter,
+                topK: Math.min(3, trainingStatus.vectorCount)
             });
-            console.log('Vector store initialized');
+            
+            const queryResponse = await pineconeIndex.query({
+                vector: queryEmbedding,
+                topK: Math.min(3, trainingStatus.vectorCount),
+                includeMetadata: true,
+                filter: queryFilter
+            });
 
-            // Search for relevant context
-            const k = Math.min(3, chatbot.training.totalChunks); // Don't try to fetch more chunks than we have
-            const relevantDocs = await vectorStore.similaritySearch(message, k);
-            console.log('Found relevant docs:', relevantDocs.length);
+            console.log('Pinecone query response:', {
+                matchCount: queryResponse.matches?.length,
+                matches: queryResponse.matches?.map(match => ({
+                    score: match.score,
+                    metadata: match.metadata
+                }))
+            });
 
-            if (relevantDocs.length === 0) {
+            if (!queryResponse.matches.length) {
                 return {
                     response: "I couldn't find any relevant information in my training data to answer your question. Could you try rephrasing it?",
                     sources: []
                 };
             }
 
-            const contextText = relevantDocs.map(doc => doc.pageContent).join('\n');
+            // Format the context from matched documents
+            const context = queryResponse.matches
+                .map(match => match.metadata.text)
+                .join('\n\n');
 
-            // Get the custom system message or use default
-            const systemMessage = chatbot.settings?.customPrompt?.systemMessage || 
-                'You are a helpful AI assistant that answers questions based on the provided context.';
+            const sourceTypes = [...new Set(queryResponse.matches.map(match => match.metadata.sourceType))].join(' and ');
 
-            // Construct the full prompt with system message and context
-            const prompt = `${systemMessage}\n\nRelevant information:\n${contextText}\n\nUser: ${message}\n\nAssistant:`;
+            // Create prompt template
+            const promptTemplate = PromptTemplate.fromTemplate(`
+                {system_message}
+                
+                Context information from {source_types}:
+                {context}
+                
+                User: {question}
+                
+                Assistant: I'll help you with your question. Let me analyze the context and provide a clear, accurate response.
+            `);
+
+            // Format the prompt with actual values
+            const formattedPrompt = await promptTemplate.format({
+                system_message: chatbot.settings?.customPrompt?.systemMessage || 
+                    'You are a helpful AI assistant that answers questions based on the provided context.',
+                source_types: sourceTypes,
+                context: context,
+                question: message
+            });
+
+            // Create the chain
+            const chain = promptTemplate
+                .pipe(model)
+                .pipe(new StringOutputParser());
 
             // Generate response
-            const response = await model.predict(prompt);
+            const response = await chain.invoke({
+                system_message: chatbot.settings?.customPrompt?.systemMessage || 
+                    'You are a helpful AI assistant that answers questions based on the provided context.',
+                source_types: sourceTypes,
+                context: context,
+                question: message
+            });
+            
             console.log('Generated response');
 
             // Update analytics
@@ -95,9 +148,12 @@ class ChatService {
 
             return {
                 response,
-                sources: relevantDocs.map(doc => ({
-                    ...doc.metadata,
-                    preview: doc.pageContent.substring(0, 200) // Add a preview of the source content
+                sources: queryResponse.matches.map(match => ({
+                    content: match.metadata.text,
+                    metadata: {
+                        ...match.metadata,
+                        preview: match.metadata.text.substring(0, 200)
+                    }
                 }))
             };
         } catch (error) {
@@ -135,21 +191,18 @@ class ChatService {
             throw new Error('Chatbot not found');
         }
 
-        const index = this.pinecone.Index(process.env.PINECONE_INDEX);
-        const vectorStore = await PineconeStore.fromExistingIndex(
-            new OpenAIEmbeddings(),
-            { 
-                pineconeIndex: index,
-                namespace: chatbotId.toString()
-            }
-        );
-
-        // Search for relevant documents
+        // Initialize vector store for this chatbot's namespace
+        const pineconeIndex = this.pinecone.index(process.env.PINECONE_INDEX);
+        const vectorStore = await PineconeStore.fromExistingIndex(new OpenAIEmbeddings(), {
+            pineconeIndex
+        });
+        
+        // Search for relevant context
         const k = Math.min(3, chatbot.training.totalChunks); // Don't try to fetch more chunks than we have
-        const documents = await vectorStore.similaritySearch(message, k);
+        const relevantDocs = await vectorStore.similaritySearch(message, k);
         
         // Format context from documents
-        const context = documents.map(doc => doc.pageContent).join('\n\n');
+        const context = relevantDocs.map(doc => doc.pageContent).join('\n\n');
         
         // Get custom prompts
         const customPrompt = chatbot.settings?.customPrompt || {};

@@ -290,7 +290,7 @@ router.post('/:id/train/documents', auth, async (req, res) => {
                         size: file.metadata.size,
                         createdBy: req.user.id
                     },
-                    chatbot._id
+                    req.params.id // Pass chatbotId
                 );
                 
                 // Add to processed documents
@@ -315,13 +315,29 @@ router.post('/:id/train/documents', auth, async (req, res) => {
         if (processedDocuments.length > 0) {
             chatbot.training.documents.push(...processedDocuments);
             chatbot.training.lastTrainingDate = new Date();
+            
+            // Update training summary counters
+            chatbot.training.totalDocuments = chatbot.training.documents.length;
+            chatbot.training.totalChunks = chatbot.training.documents.reduce((sum, doc) => sum + (doc.chunks || 0), 0);
+            
+            // Mark chatbot as trained
+            chatbot.deployment.status = 'trained';
+            
             await chatbot.save();
         }
 
+        // Get updated training stats from Pinecone
+        const stats = await documentService.getNamespaceStats(chatbot._id);
+        
         res.json({
             success: true,
             processed: processedDocuments.length,
-            errors: errors.length > 0 ? errors : undefined
+            errors: errors.length > 0 ? errors : undefined,
+            summary: {
+                totalDocuments: chatbot.training.totalDocuments,
+                totalChunks: stats.vectorCount,
+                lastTrainingDate: chatbot.training.lastTrainingDate
+            }
         });
     } catch (error) {
         console.error('Error processing documents:', error);
@@ -631,54 +647,49 @@ router.get('/:id/training', auth, async (req, res) => {
         const chatbot = await Chatbot.findOne({
             _id: req.params.id,
             user: req.user.id
-        });
+        }).lean();
 
         if (!chatbot) {
             return res.status(404).json({ success: false, error: 'Chatbot not found' });
         }
 
+        // Get real-time vector count from Pinecone
+        const stats = await documentService.getNamespaceStats(chatbot._id);
+
         const response = {
             summary: {
-                totalDocuments: chatbot.training.documents.length,
-                totalWebsites: chatbot.training.websites.length,
-                totalChunks: chatbot.training.documents.reduce((sum, doc) => sum + (doc.chunks || 0), 0),
+                documents: {
+                    count: chatbot.training.documents.length,
+                    status: chatbot.training.documents.length > 0 ? 'uploaded' : 'empty'
+                },
+                websites: {
+                    count: chatbot.training.websites.length,
+                    status: chatbot.training.websites.length > 0 ? 'crawled' : 'empty'
+                },
+                chunks: {
+                    count: stats.vectorCount,
+                    status: stats.vectorCount > 0 ? 'processed' : 'empty'
+                },
                 lastTrainingDate: chatbot.training.lastTrainingDate || null
             },
-            routes: []
+            documents: chatbot.training.documents.map(doc => ({
+                type: 'document',
+                name: doc.originalName || doc.filename,
+                uploadDate: doc.uploadDate || doc.processedAt,
+                size: doc.size || 0,
+                status: doc.status || 'processed',
+                chunks: doc.chunks || 0,
+                error: doc.error
+            })),
+            websites: chatbot.training.websites.map(site => ({
+                type: 'website',
+                url: site.url,
+                crawledAt: site.lastCrawled,
+                pagesProcessed: site.pagesProcessed || 0,
+                status: site.status || 'processed',
+                error: site.error
+            }))
         };
-
-        // Add document routes if documents exist
-        if (chatbot.training.documents.length > 0) {
-            response.routes.push({
-                type: 'documents',
-                items: chatbot.training.documents.map(doc => ({
-                    type: 'document',
-                    name: doc.originalName || doc.filename,
-                    path: `/api/chatbot/${chatbot._id}/documents/${doc.filename}`,
-                    uploadDate: doc.uploadDate || doc.processedAt,
-                    size: doc.size || 0,
-                    status: doc.status || 'processed',
-                    chunks: doc.chunks || 0,
-                    error: doc.error
-                }))
-            });
-        }
-
-        // Add website routes if websites exist
-        if (chatbot.training.websites.length > 0) {
-            response.routes.push({
-                type: 'websites',
-                items: chatbot.training.websites.map(site => ({
-                    _id: site._id,
-                    type: 'website',
-                    url: site.url,
-                    crawledAt: site.lastCrawled,
-                    pagesProcessed: site.pagesProcessed || 0,
-                    status: site.status || 'processed',
-                    error: site.error
-                }))
-            });
-        }
 
         res.json(response);
     } catch (error) {

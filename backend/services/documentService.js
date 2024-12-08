@@ -44,17 +44,17 @@ class DocumentService {
 
     async initPinecone() {
         try {
-            const pc = new Pinecone({
+            const pinecone = new Pinecone({
                 apiKey: process.env.PINECONE_API_KEY
             });
             
-            // Initialize index with full host URL
-            const pineconeIndex = pc.index(process.env.PINECONE_INDEX);
+            const pineconeIndex = pinecone.index(process.env.PINECONE_INDEX, process.env.PINECONE_HOST);
             
             const embeddings = new OpenAIEmbeddings({
                 openAIApiKey: process.env.OPENAI_API_KEY
             });
-            return { pinecone: pc, pineconeIndex, embeddings };
+
+            return { pinecone, pineconeIndex, embeddings };
         } catch (error) {
             logger.error('Error initializing Pinecone:', error);
             throw error;
@@ -123,7 +123,8 @@ class DocumentService {
                     source: file.originalname,
                     documentId: document._id.toString(),
                     pageNumber: String(doc.metadata?.page || '1'),
-                    sourceType: 'document'
+                    sourceType: 'document',
+                    chatbotId: chatbotId.toString()
                 }
             }));
 
@@ -352,18 +353,33 @@ class DocumentService {
 
     async getNamespaceStats(chatbotId) {
         try {
-            const { pinecone, pineconeIndex } = await this.initPinecone();
-            const stats = await pineconeIndex.describeIndexStats();
+            const { pineconeIndex } = await this.initPinecone();
             
-            const namespace = stats.namespaces[chatbotId.toString()];
-            return namespace ? {
-                vectorCount: namespace.vectorCount,
-                dimensions: stats.dimension
-            } : null;
+            // Get index stats using the correct method
+            const indexStats = await pineconeIndex.describeIndexStats({
+                filter: {
+                    chatbotId: chatbotId.toString()
+                }
+            });
+
+            console.log('Pinecone index stats:', {
+                chatbotId: chatbotId.toString(),
+                stats: indexStats
+            });
+
+            // Use totalRecordCount instead of totalVectorCount
+            const vectorCount = indexStats.totalRecordCount || 0;
+            const dimension = indexStats.dimension || 1536;
+            
+            return {
+                vectorCount,
+                dimensions: dimension
+            };
         } catch (error) {
             logger.error('Error getting namespace stats:', {
                 chatbotId,
-                error: error.message
+                error: error.message,
+                stack: error.stack
             });
             throw error;
         }
@@ -373,12 +389,27 @@ class DocumentService {
         try {
             const { pineconeIndex } = await this.initPinecone();
             
-            // Delete all vectors in the namespace
-            await pineconeIndex.deleteAll({
+            // First, query to get all vector IDs for this chatbot
+            const queryResponse = await pineconeIndex.query({
+                vector: new Array(1536).fill(0), // Using a zero vector to match all
                 filter: {
                     chatbotId: chatbotId.toString()
-                }
+                },
+                topK: 10000, // Adjust based on your expected maximum vectors
+                includeMetadata: true
             });
+
+            if (queryResponse.matches && queryResponse.matches.length > 0) {
+                const vectorIds = queryResponse.matches.map(match => match.id);
+                
+                // Delete vectors by IDs in batches of 1000
+                const batchSize = 1000;
+                for (let i = 0; i < vectorIds.length; i += batchSize) {
+                    const batch = vectorIds.slice(i, i + batchSize);
+                    await pineconeIndex.deleteMany(batch);
+                    await new Promise(resolve => setTimeout(resolve, 100)); // Small delay between batches
+                }
+            }
 
             // Clear website crawl records
             await WebsiteCrawl.deleteMany({ chatbotId });
@@ -389,7 +420,8 @@ class DocumentService {
             logger.error('Error deleting training data:', {
                 chatbotId,
                 error: error.message,
-                stack: error.stack
+                stack: error.stack,
+                timestamp: new Date().toISOString()
             });
             throw error;
         }
@@ -399,33 +431,43 @@ class DocumentService {
         try {
             const { pineconeIndex } = await this.initPinecone();
 
+            // Build the filter based on parameters
+            const filter = {
+                chatbotId: chatbotId.toString()
+            };
+
             if (itemId && sourceType) {
-                // Delete vectors directly using deleteMany with filter
-                await pineconeIndex.deleteMany({
-                    filter: {
-                        chatbotId: chatbotId.toString(),
-                        [sourceType === 'document' ? 'documentId' : 'source']: itemId
-                    }
-                });
-                logger.info(`Successfully deleted vectors for ${sourceType} ${itemId}`);
-            } else {
-                // Delete all vectors in the namespace
-                await pineconeIndex.deleteAll({
-                    filter: {
-                        chatbotId: chatbotId.toString()
-                    }
-                });
-                logger.info(`Deleted all vectors in namespace ${chatbotId}`);
+                filter[sourceType === 'document' ? 'documentId' : 'source'] = itemId;
             }
-        } catch (err) {
-            logger.error('Error deleting vectors from Pinecone:', {
-                chatbotId,
-                itemId,
-                sourceType,
-                error: err.message,
-                stack: err.stack
+
+            // Query to get the vector IDs
+            const queryResponse = await pineconeIndex.query({
+                vector: new Array(1536).fill(0), // Using a zero vector to match all
+                filter: filter,
+                topK: 10000, // Adjust based on your expected maximum vectors
+                includeMetadata: true
             });
-            throw err;
+
+            if (queryResponse.matches && queryResponse.matches.length > 0) {
+                const vectorIds = queryResponse.matches.map(match => match.id);
+                
+                // Delete vectors by IDs in batches of 1000
+                const batchSize = 1000;
+                for (let i = 0; i < vectorIds.length; i += batchSize) {
+                    const batch = vectorIds.slice(i, i + batchSize);
+                    await pineconeIndex.deleteMany(batch);
+                    await new Promise(resolve => setTimeout(resolve, 100)); // Small delay between batches
+                }
+
+                logger.info(`Successfully deleted ${vectorIds.length} vectors for chatbot ${chatbotId}${itemId ? ` and ${sourceType} ${itemId}` : ''}`);
+            } else {
+                logger.info(`No vectors found to delete for chatbot ${chatbotId}${itemId ? ` and ${sourceType} ${itemId}` : ''}`);
+            }
+
+            return { success: true };
+        } catch (error) {
+            logger.error('Error deleting vectors from Pinecone:', error);
+            throw error;
         }
     }
 
@@ -435,10 +477,8 @@ class DocumentService {
             
             // Delete vectors with the specific document ID
             await pineconeIndex.deleteMany({
-                filter: {
-                    chatbotId: chatbotId.toString(),
-                    documentId: documentId
-                }
+                chatbotId: { $eq: chatbotId.toString() },
+                documentId: { $eq: documentId }
             });
 
             logger.info(`Successfully deleted document ${documentId} from chatbot ${chatbotId}`);
@@ -483,14 +523,15 @@ class DocumentService {
             const { pineconeIndex } = await this.initPinecone();
             
             // Get stats to determine total vectors
-            const stats = await pineconeIndex.describeIndexStats();
+            const indexStats = await pineconeIndex.describeIndexStats();
             logger.info('Pinecone index stats:', {
-                stats,
-                namespaces: stats.namespaces
+                namespaces: indexStats.namespaces,
+                totalVectorCount: indexStats.totalVectorCount,
+                dimension: indexStats.dimension
             });
 
             // Get total vectors from the default namespace
-            const totalVectors = stats.namespaces?.[""]?.recordCount || 0;
+            const totalVectors = indexStats.totalVectorCount || 0;
             const batchSize = 10000;
             const vectorIds = [];
             
@@ -558,8 +599,8 @@ class DocumentService {
                 for (let i = 0; i < vectorIds.length; i += deleteBatchSize) {
                     const batch = vectorIds.slice(i, i + deleteBatchSize);
                     try {
-                        // Use deleteMany on the namespace with array of IDs
-                        await defaultNs.deleteMany(batch);
+                        // Use delete on the namespace with array of IDs
+                        await defaultNs.delete(batch);
                         logger.info(`Deleted batch of ${batch.length} vectors`);
                     } catch (err) {
                         logger.error('Error deleting vector batch:', {
@@ -725,8 +766,10 @@ class DocumentService {
             // Create embeddings and store in Pinecone
             const { pinecone, pineconeIndex, embeddings } = await this.initPinecone();
             
-            // Process in batches
-            const batchSize = 5; // Smaller batch size for more frequent updates
+            // Process in larger batches for efficiency
+            const batchSize = 20; // Increased batch size
+            const allVectors = [];
+            
             for (let i = 0; i < uniqueChunks.length; i += batchSize) {
                 const batch = uniqueChunks.slice(i, i + batchSize);
                 const batchEmbeddings = await embeddings.embedDocuments(
@@ -734,22 +777,29 @@ class DocumentService {
                 );
 
                 const vectors = batch.map((chunk, index) => ({
-                    id: this.generateVectorId(chunk.pageContent, chatbotId.toString()),
+                    id: this.generateVectorId(chunk.pageContent, chatbotId?.toString() || 'default'),
                     values: batchEmbeddings[index],
                     metadata: {
-                        content: chunk.pageContent,
+                        text: chunk.pageContent, // Changed from content to text to match query expectations
                         source: metadata.originalName,
                         documentId: document._id.toString(),
-                        page: chunk.metadata.page
+                        page: chunk.metadata.page,
+                        chatbotId: chatbotId?.toString() || 'default',
+                        sourceType: 'document'
                     }
                 }));
 
-                await this.storeVectorsInPinecone(vectors, pineconeIndex);
+                allVectors.push(...vectors);
                 
-                // Update progress more frequently
+                // Update progress
                 document.metadata.processedChunkCount = i + batch.length;
                 document.metadata.progress = Math.round(((i + batch.length) / uniqueChunks.length) * 100);
                 await document.save();
+            }
+
+            // Store all vectors at once
+            if (allVectors.length > 0) {
+                await this.storeVectorsInPinecone(allVectors, pineconeIndex);
             }
 
             // Update final status
@@ -780,52 +830,43 @@ class DocumentService {
     }
 
     async storeVectorsInPinecone(vectors, pineconeIndex) {
-        if (!vectors || vectors.length === 0) {
-            logger.warn('No vectors provided for storage');
-            return 0;
-        }
-
-        if (!pineconeIndex) {
-            throw new Error('Pinecone index is required for vector storage');
-        }
-
-        // Batch vectors in groups of 100 (Pinecone's limit)
-        const batchSize = 100;
-        let storedCount = 0;
-
         try {
-            // Process in batches
+            console.log('Storing vectors in Pinecone:', {
+                vectorCount: vectors.length,
+                sampleMetadata: vectors[0]?.metadata,
+                sampleChatbotId: vectors[0]?.metadata?.chatbotId
+            });
+
+            // Store vectors in larger batches
+            const batchSize = 100;
             for (let i = 0; i < vectors.length; i += batchSize) {
                 const batch = vectors.slice(i, i + batchSize);
                 
-                // Prepare the upsert request
-                const upsertRequest = batch.map(vector => ({
-                    id: vector.id,
-                    values: Array.from(vector.values),
-                    metadata: vector.metadata
-                }));
+                // Log progress for large batches
+                if (vectors.length > batchSize) {
+                    console.log(`Upserting batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(vectors.length/batchSize)}`);
+                }
 
-                // Debug log
-                logger.info('Upsert batch:', {
-                    batchSize: upsertRequest.length,
-                    sampleVectorId: upsertRequest[0]?.id,
-                    sampleMetadata: JSON.stringify(upsertRequest[0]?.metadata)
-                });
-
-                // Direct upsert call
-                await pineconeIndex.upsert(upsertRequest);
-                
-                storedCount += batch.length;
-                logger.info(`Stored batch of ${batch.length} vectors. Total stored: ${storedCount}/${vectors.length}`);
+                try {
+                    await pineconeIndex.upsert(batch);
+                } catch (error) {
+                    console.error('Error upserting batch:', {
+                        batchIndex: Math.floor(i/batchSize),
+                        error: error.message
+                    });
+                    throw error;
+                }
             }
 
-            return storedCount;
-        } catch (error) {
-            logger.error('Error storing vector batch:', {
-                error: error.message,
-                errorStack: error.stack,
-                vectorSample: vectors[0]
+            // Get index stats after upsert
+            const indexStats = await pineconeIndex.describeIndexStats();
+            console.log('Pinecone index stats after upsert:', {
+                totalVectorCount: indexStats.totalVectorCount,
+                dimension: indexStats.dimension
             });
+            return { success: true };
+        } catch (error) {
+            console.error('Error storing vectors:', error);
             throw error;
         }
     }
