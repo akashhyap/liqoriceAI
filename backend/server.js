@@ -26,12 +26,36 @@ const server = createServer(app);
 
 // Middleware
 app.use(cors({
-    origin: ['https://liqoriceai-frontend.onrender.com', 'http://localhost:3000', 'http://localhost:3001'],
+    origin: function(origin, callback) {
+        // allow requests with no origin (like mobile apps or curl requests)
+        if(!origin) return callback(null, true);
+        
+        const allowedOrigins = [
+            'http://localhost:3000',
+            'http://localhost:3001',
+            'http://127.0.0.1:5500',
+            'https://liqoriceai-frontend.onrender.com'
+        ];
+        
+        if (allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+
+        // For production use, validate the origin
+        try {
+            const originUrl = new URL(origin);
+            return callback(null, true);
+        } catch (error) {
+            return callback(new Error('Invalid origin'), false);
+        }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+    optionsSuccessStatus: 204
 }));
 
+// Handle pre-flight requests
 app.options('*', cors());
 
 app.use(helmet());

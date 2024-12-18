@@ -20,18 +20,27 @@ const chatCors = cors({
             'http://127.0.0.1:3001',
             'http://127.0.0.1:5500',
             'http://localhost:5500',
+            'https://liqoriceai-frontend.onrender.com',
             'null'
         ];
         
-        if (allowedOrigins.indexOf(origin) === -1) {
-            console.log('Chat route blocked origin:', origin);
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            return callback(null, true);
+        }
+
+        // For production widget embedding, validate the origin
+        try {
+            const originUrl = new URL(origin);
+            return callback(null, true);
+        } catch (error) {
+            console.log('Chat route blocked invalid origin:', origin);
             return callback(new Error('CORS policy violation'), false);
         }
-        callback(null, true);
     },
     methods: ['GET', 'POST', 'OPTIONS'],
     credentials: true,
-    preflightContinue: true
+    preflightContinue: false,
+    optionsSuccessStatus: 204
 });
 
 // Apply CORS to all chat routes
