@@ -25,44 +25,14 @@ const app = express();
 const server = createServer(app);
 
 // Middleware
-app.options('*', cors());
-
 app.use(cors({
-    origin: function(origin, callback) {
-        // allow requests with no origin (like mobile apps or curl requests)
-        if (!origin) return callback(null, true);
-        
-        // Allow localhost and your main frontend during development
-        const trustedOrigins = [
-            'http://localhost:3001',
-            'http://localhost:5500',
-            'http://127.0.0.1:5500',
-            'https://liqoriceai-frontend.onrender.com',
-            'https://liqorice-frontend.onrender.com',
-            'https://liqoriceai.onrender.com',
-            process.env.FRONTEND_URL
-        ].filter(Boolean); // Remove any undefined values
-        
-        if (trustedOrigins.includes(origin)) {
-            return callback(null, true);
-        }
-
-        // For dynamic origins (like customer websites), validate the origin
-        try {
-            const originUrl = new URL(origin);
-            // You can add additional validation logic here if needed
-            return callback(null, true);
-        } catch (error) {
-            return callback(new Error('Invalid origin'), false);
-        }
-    },
+    origin: ['https://liqoriceai-frontend.onrender.com', 'http://localhost:3000', 'http://localhost:3001'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-    exposedHeaders: ['Content-Range', 'X-Content-Range'],
-    preflightContinue: false,
-    optionsSuccessStatus: 204
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
 }));
+
+app.options('*', cors());
 
 app.use(helmet());
 app.use(express.json());
