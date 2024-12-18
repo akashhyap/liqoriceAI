@@ -37,22 +37,31 @@ app.use(cors({
             'http://localhost:3001',
             'http://localhost:5500',
             'http://127.0.0.1:5500',
+            'https://liqoriceai-frontend.onrender.com',
             'https://liqorice-frontend.onrender.com',
+            'https://liqoriceai.onrender.com',
             process.env.FRONTEND_URL
-        ];
+        ].filter(Boolean); // Remove any undefined values
         
-        // If it's a trusted origin, allow it immediately
         if (trustedOrigins.includes(origin)) {
             return callback(null, true);
         }
-        
-        // For all other origins, allow them (since this is a widget that can be embedded anywhere)
-        return callback(null, true);
+
+        // For dynamic origins (like customer websites), validate the origin
+        try {
+            const originUrl = new URL(origin);
+            // You can add additional validation logic here if needed
+            return callback(null, true);
+        } catch (error) {
+            return callback(new Error('Invalid origin'), false);
+        }
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-    exposedHeaders: ['Content-Range', 'X-Content-Range']
+    exposedHeaders: ['Content-Range', 'X-Content-Range'],
+    preflightContinue: false,
+    optionsSuccessStatus: 204
 }));
 
 app.use(helmet());
