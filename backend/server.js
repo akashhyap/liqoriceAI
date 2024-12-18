@@ -15,6 +15,7 @@ import trainingRoutes from './routes/training.js';
 import { Server } from 'socket.io';
 import { createServer } from 'http';
 import logger from './services/loggerService.js';
+import { notFound, errorHandler } from './middleware/errorHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -25,39 +26,19 @@ const app = express();
 const server = createServer(app);
 
 // Middleware
-app.use(cors({
-    origin: function(origin, callback) {
-        // allow requests with no origin (like mobile apps or curl requests)
-        if(!origin) return callback(null, true);
-        
-        const allowedOrigins = [
-            'http://localhost:3000',
-            'http://localhost:3001',
-            'http://127.0.0.1:5500',
-            'https://liqoriceai-frontend.onrender.com'
-        ];
-        
-        if (allowedOrigins.includes(origin)) {
-            return callback(null, true);
-        }
+// CORS configuration
+const origin = process.env.NODE_ENV === 'production'
+    ? 'https://liqoriceai-frontend.onrender.com'
+    : 'http://localhost:3001';
 
-        // For production use, validate the origin
-        try {
-            const originUrl = new URL(origin);
-            return callback(null, true);
-        } catch (error) {
-            return callback(new Error('Invalid origin'), false);
-        }
-    },
+app.use(cors({
+    origin,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-    optionsSuccessStatus: 204
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
 }));
 
-// Handle pre-flight requests
-app.options('*', cors());
-
+// Security middleware
 app.use(helmet());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -72,9 +53,14 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// Routes
-app.use('/api/chatbot', chatbotRoutes);
+// Basic route for API health check
+app.get('/', (req, res) => {
+    res.json({ message: 'Welcome to Liqorice API' });
+});
+
+// API routes
 app.use('/api/chat', chatRoutes);
+app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/analytics', analyticsRoutes);
@@ -134,8 +120,6 @@ io.on('connection', (socket) => {
 
 // Error handling middleware
 import {
-    errorHandler,
-    notFound,
     validationErrorHandler,
     databaseErrorHandler,
 } from './middleware/errorHandler.js';

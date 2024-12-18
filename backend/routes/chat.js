@@ -8,38 +8,15 @@ import ChatHistory from '../models/ChatHistory.js';
 const router = express.Router();
 
 // Configure CORS for chat routes
-const chatCors = cors({
-    origin: function(origin, callback) {
-        // allow requests with no origin (like mobile apps or curl requests)
-        if(!origin) return callback(null, true);
-        
-        const allowedOrigins = [
-            'http://localhost:3000',
-            'http://localhost:3001',
-            'http://127.0.0.1:3000',
-            'http://127.0.0.1:3001',
-            'http://127.0.0.1:5500',
-            'http://localhost:5500',
-            'https://liqoriceai-frontend.onrender.com',
-            'null'
-        ];
-        
-        if (allowedOrigins.indexOf(origin) !== -1) {
-            return callback(null, true);
-        }
+const origin = process.env.NODE_ENV === 'production'
+    ? 'https://liqoriceai-frontend.onrender.com'
+    : 'http://localhost:3001';
 
-        // For production widget embedding, validate the origin
-        try {
-            const originUrl = new URL(origin);
-            return callback(null, true);
-        } catch (error) {
-            console.log('Chat route blocked invalid origin:', origin);
-            return callback(new Error('CORS policy violation'), false);
-        }
-    },
-    methods: ['GET', 'POST', 'OPTIONS'],
+const chatCors = cors({
+    origin,
     credentials: true,
-    preflightContinue: false,
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
     optionsSuccessStatus: 204
 });
 

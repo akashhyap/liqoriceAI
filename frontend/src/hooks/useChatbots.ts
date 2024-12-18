@@ -9,7 +9,7 @@ export const useChatbots = () => {
 
   const fetchChatbots = async () => {
     try {
-      const response = await axios.get('/chatbot');
+      const response = await axios.get('/chatbot'); // updated API endpoint path
       console.log('API Response:', response.data);
       // Extract chatbots array from the response
       const chatbotsData = response.data.chatbots || [];
@@ -29,7 +29,7 @@ export const useChatbots = () => {
 
   const deleteChatbot = async (id: string) => {
     try {
-      await axios.delete(`/chatbot/${id}`);
+      await axios.delete(`/chatbot/${id}`); // updated API endpoint path
       setChatbots(prev => prev.filter(bot => bot._id !== id));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete chatbot');

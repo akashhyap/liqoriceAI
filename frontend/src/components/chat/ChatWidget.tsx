@@ -87,7 +87,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
 
     const handleSubmitFeedback = async (rating: number) => {
         try {
-            await axios.patch(`/api/chatbot/${botId}/history/${sessionId}`, {
+            await axios.patch(`/chatbot/${botId}/history/${sessionId}`, {
                 userSatisfactionScore: (rating * 20) // Convert 1-5 rating to 0-100 score
             });
         } catch (error) {
