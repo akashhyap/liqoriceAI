@@ -25,29 +25,35 @@ const app = express();
 const server = createServer(app);
 
 // Middleware
+app.options('*', cors());
+
 app.use(cors({
     origin: function(origin, callback) {
-        const allowedOrigins = [
+        // allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        
+        // Allow localhost and your main frontend during development
+        const trustedOrigins = [
             'http://localhost:3001',
-            'https://liqorice-frontend.onrender.com', 
-            process.env.FRONTEND_URL 
+            'http://localhost:5500',
+            'http://127.0.0.1:5500',
+            'https://liqorice-frontend.onrender.com',
+            process.env.FRONTEND_URL
         ];
         
-        // allow requests with no origin (like mobile apps or curl requests)
-        if(!origin) return callback(null, true);
-        
-        if(allowedOrigins.indexOf(origin) === -1){
-            var msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-            return callback(new Error(msg), false);
+        // If it's a trusted origin, allow it immediately
+        if (trustedOrigins.includes(origin)) {
+            return callback(null, true);
         }
+        
+        // For all other origins, allow them (since this is a widget that can be embedded anywhere)
         return callback(null, true);
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+    exposedHeaders: ['Content-Range', 'X-Content-Range']
 }));
-
-// Handle pre-flight requests
-app.options('*', cors());
 
 app.use(helmet());
 app.use(express.json());

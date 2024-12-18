@@ -15,26 +15,36 @@ interface TabPanelProps {
 
 interface TrainingData {
   summary: {
-    totalDocuments: number;
-    totalWebsites: number;
-    totalChunks: number;
+    documents: {
+      count: number;
+      status: string;
+    };
+    websites: {
+      count: number;
+      status: string;
+    };
+    chunks: {
+      count: number;
+      status: string;
+    };
     lastTrainingDate: string | null;
   };
-  routes: Array<{
-    type: 'documents' | 'websites';
-    items: Array<{
-      type: string;
-      name?: string;
-      path?: string;
-      url?: string;
-      uploadDate?: string;
-      crawledAt?: string;
-      size?: number;
-      pagesProcessed?: number;
-      chunks?: number;
-      status: string;
-      error?: string;
-    }>;
+  documents: Array<{
+    type: string;
+    name: string;
+    uploadDate: string;
+    size: number;
+    status: string;
+    chunks: number;
+    error?: string;
+  }>;
+  websites: Array<{
+    type: string;
+    url: string;
+    crawledAt: string;
+    pagesProcessed: number;
+    status: string;
+    error?: string;
   }>;
 }
 
@@ -129,14 +139,14 @@ const ChatbotTrainingPage: React.FC = () => {
             <Box>
               <Typography variant="subtitle1" gutterBottom>Documents</Typography>
               <Typography variant="body2" color="text.secondary">
-                {trainingData.summary.totalDocuments} document{trainingData.summary.totalDocuments !== 1 ? 's' : ''} uploaded
+                {trainingData.summary.documents.count} document{trainingData.summary.documents.count !== 1 ? 's' : ''} uploaded
               </Typography>
-              {trainingData.routes.find(r => r.type === 'documents')?.items.map((doc, index) => (
+              {trainingData.documents.map((doc, index) => (
                 <Box component="ul" sx={{ mt: 1, pl: 2 }} key={index}>
                   <li>
                     <Typography variant="body2">
-                      {doc.name} ({new Date(doc.uploadDate!).toLocaleDateString()})
-                      {doc.chunks && ` - ${doc.chunks} chunks`}
+                      {doc.name} ({new Date(doc.uploadDate).toLocaleDateString()})
+                      {doc.chunks > 0 && ` - ${doc.chunks} chunks`}
                       {doc.status !== 'processed' && (
                         <Box component="span" sx={{ color: 'error.main' }}>
                           {` - ${doc.status}`}
@@ -151,14 +161,14 @@ const ChatbotTrainingPage: React.FC = () => {
             <Box>
               <Typography variant="subtitle1" gutterBottom>Websites</Typography>
               <Typography variant="body2" color="text.secondary">
-                {trainingData.summary.totalWebsites} website{trainingData.summary.totalWebsites !== 1 ? 's' : ''} crawled
+                {trainingData.summary.websites.count} website{trainingData.summary.websites.count !== 1 ? 's' : ''} crawled
               </Typography>
-              {trainingData.routes.find(r => r.type === 'websites')?.items.map((site, index) => (
+              {trainingData.websites.map((site, index) => (
                 <Box component="ul" sx={{ mt: 1, pl: 2 }} key={index}>
                   <li>
                     <Typography variant="body2">
-                      {site.url} ({new Date(site.crawledAt!).toLocaleDateString()})
-                      {site.pagesProcessed && ` - ${site.pagesProcessed} pages`}
+                      {site.url} ({new Date(site.crawledAt).toLocaleDateString()})
+                      {site.pagesProcessed > 0 && ` - ${site.pagesProcessed} pages`}
                       {site.status !== 'processed' && (
                         <Box component="span" sx={{ color: 'error.main' }}>
                           {` - ${site.status}`}
@@ -173,7 +183,7 @@ const ChatbotTrainingPage: React.FC = () => {
             <Box>
               <Typography variant="subtitle1" gutterBottom>Total Training Data</Typography>
               <Typography variant="body2" color="text.secondary">
-                {trainingData.summary.totalChunks} chunk{trainingData.summary.totalChunks !== 1 ? 's' : ''} processed
+                {trainingData.summary.chunks.count} chunk{trainingData.summary.chunks.count !== 1 ? 's' : ''} processed
               </Typography>
               {trainingData.summary.lastTrainingDate && (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
@@ -183,15 +193,15 @@ const ChatbotTrainingPage: React.FC = () => {
             </Box>
           </Box>
           
-          {trainingData.routes.length > 0 && (
+          {(trainingData.documents.length > 0 || trainingData.websites.length > 0) && (
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
               <Button 
                 variant="outlined" 
                 color="primary"
                 onClick={() => navigate(`/app/chatbot/${id}/training/documents/details`)}
-                sx={{ borderRadius: '8px'}}
+                sx={{ borderRadius: '8px' }}
               >
-                View More
+                View Details
               </Button>
             </Box>
           )}
