@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
 // Initialize Stripe
-const stripePromise = loadStripe('pk_test_your_publishable_key');
+const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY!);
 
 const SubscriptionPage: React.FC = () => {
     const navigate = useNavigate();
@@ -21,10 +21,11 @@ const SubscriptionPage: React.FC = () => {
             setSelectedPlan(planId);
             
             // Create subscription intent
-            const response = await fetch('/api/subscription/create-subscription', {
+            const response = await fetch(`${process.env.REACT_APP_API_URL}/subscription/create-subscription`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
                 },
                 body: JSON.stringify({ planId })
             });
@@ -42,7 +43,11 @@ const SubscriptionPage: React.FC = () => {
 
     const handlePaymentSuccess = async () => {
         // Refresh user data
-        const response = await fetch('/api/user/me');
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/user/me`, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+        });
         if (response.ok) {
             const userData = await response.json();
             updateUser(userData);

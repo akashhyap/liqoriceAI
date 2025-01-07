@@ -11,14 +11,8 @@ import {
 import {
     CardElement,
     useStripe,
-    useElements,
-    Elements
+    useElements
 } from '@stripe/react-stripe-js';
-import { loadStripe } from '@stripe/stripe-js';
-import axios from '../../services/axios';
-
-// Initialize Stripe with your publishable key
-const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY!);
 
 interface PaymentFormProps {
     planId: string;
@@ -26,7 +20,7 @@ interface PaymentFormProps {
     onCancel: () => void;
 }
 
-const PaymentFormContent: React.FC<PaymentFormProps> = ({
+const PaymentForm: React.FC<PaymentFormProps> = ({
     planId,
     onSuccess,
     onCancel
@@ -48,35 +42,57 @@ const PaymentFormContent: React.FC<PaymentFormProps> = ({
         setError(null);
 
         try {
-            // Create payment intent
-            const { data: clientSecret } = await axios.post('/create-subscription', {
-                planId,
-                email
+            const cardElement = elements.getElement(CardElement);
+            if (!cardElement) {
+                throw new Error('Card element not found');
+            }
+
+            // Create payment method
+            const { error: cardError, paymentMethod } = await stripe.createPaymentMethod({
+                type: 'card',
+                card: cardElement,
+                billing_details: {
+                    email
+                }
             });
 
-            // Confirm the payment with Stripe
-            const { error: stripeError, paymentIntent } = await stripe.confirmCardPayment(
-                clientSecret,
-                {
-                    payment_method: {
-                        card: elements.getElement(CardElement)!,
-                        billing_details: {
-                            email
-                        }
-                    }
-                }
-            );
-
-            if (stripeError) {
-                setError(stripeError.message || 'An error occurred');
-            } else if (paymentIntent.status === 'succeeded') {
-                onSuccess();
+            if (cardError) {
+                throw cardError;
             }
+
+            // Create subscription with payment method
+            const response = await fetch(`${process.env.REACT_APP_API_URL}/subscription/create-subscription`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({
+                    planId,
+                    email,
+                    paymentMethodId: paymentMethod.id
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to create subscription');
+            }
+
+            const { clientSecret } = await response.json();
+
+            // Confirm the payment
+            const { error: confirmError } = await stripe.confirmCardPayment(clientSecret);
+
+            if (confirmError) {
+                throw confirmError;
+            }
+
+            onSuccess();
         } catch (err: any) {
             setError(err.message || 'An error occurred');
+            setProcessing(false);
         }
-
-        setProcessing(false);
     };
 
     return (
@@ -141,14 +157,6 @@ const PaymentFormContent: React.FC<PaymentFormProps> = ({
                 </CardContent>
             </Card>
         </Box>
-    );
-};
-
-const PaymentForm: React.FC<PaymentFormProps> = (props) => {
-    return (
-        <Elements stripe={stripePromise}>
-            <PaymentFormContent {...props} />
-        </Elements>
     );
 };
 
