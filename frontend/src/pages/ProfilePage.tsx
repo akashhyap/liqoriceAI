@@ -23,6 +23,12 @@ import { PasswordUpdateRequest } from '../types';
 import useAuthStore from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
 
+interface SubscriptionStatus {
+  status: string;
+  current_period_end: number;
+  cancel_at_period_end: boolean;
+}
+
 const ProfilePage: React.FC = () => {
   const { user, updateUser, isLoading, loadUser } = useAuthStore();
   const navigate = useNavigate();
@@ -34,16 +40,51 @@ const ProfilePage: React.FC = () => {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
 
   useEffect(() => {
     loadUser();
-    fetchSubscriptionStatus();
   }, [loadUser]);
 
   useEffect(() => {
+    const fetchSubscriptionStatus = async () => {
+      try {
+        setSubscriptionLoading(true);
+        setError(null); // Clear any previous errors
+
+        // Make sure REACT_APP_API_URL doesn't end with /api
+        const baseUrl = process.env.REACT_APP_API_URL?.replace(/\/api$/, '');
+        const response = await fetch(`${baseUrl}/api/subscription/status`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        const data = await response.json();
+        console.log('Subscription status response:', data);
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to fetch subscription status');
+        }
+
+        setSubscriptionStatus(data.subscription);
+      } catch (err) {
+        console.error('Error fetching subscription status:', err);
+        setError(err instanceof Error ? err.message : 'Failed to fetch subscription status');
+      } finally {
+        setSubscriptionLoading(false);
+      }
+    };
+
     if (user) {
-      console.log('User data:', user); // Debug log
+      fetchSubscriptionStatus();
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
       setName(user.name);
       setEmail(user.email);
     }
@@ -102,45 +143,60 @@ const ProfilePage: React.FC = () => {
     }
   };
 
-  const fetchSubscriptionStatus = async () => {
-    try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/subscription/status`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setSubscriptionStatus(data.subscription);
-      }
-    } catch (err) {
-      console.error('Error fetching subscription status:', err);
-    }
-  };
-
   const handleCancelSubscription = async () => {
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/subscription/cancel`, {
+      console.log('Starting subscription cancellation...');
+      setSubscriptionLoading(true);
+      setError(null); // Clear any previous errors
+
+      // Make sure REACT_APP_API_URL doesn't end with /api
+      const baseUrl = process.env.REACT_APP_API_URL?.replace(/\/api$/, '');
+      const response = await fetch(`${baseUrl}/api/subscription/cancel`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
         }
       });
 
+      console.log('Cancellation response:', response);
+      const responseData = await response.json();
+      console.log('Cancellation response data:', responseData);
+
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to cancel subscription');
+        const errorMessage = responseData.error || 'Failed to cancel subscription';
+        throw new Error(errorMessage);
       }
 
-      await fetchSubscriptionStatus();
+      // Update subscription status with the returned data
+      if (responseData.subscription) {
+        setSubscriptionStatus(responseData.subscription);
+      }
+
+      // Show success message
+      setMessage({ type: 'success', text: responseData.message || 'Subscription successfully cancelled' });
+      
+      // Close the dialog
       setOpenDialog(false);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      console.error('Error canceling subscription:', err);
+      setError(err instanceof Error ? err.message : 'Failed to cancel subscription');
+      // Don't close dialog on error
+    } finally {
+      setSubscriptionLoading(false);
     }
   };
 
   const handleUpgrade = () => {
     navigate('/app/subscription');
+  };
+
+  const formatDate = (timestamp: number) => {
+    return new Date(timestamp * 1000).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
   };
 
   return (
@@ -230,7 +286,7 @@ const ProfilePage: React.FC = () => {
               </form>
             </Paper>
 
-            <Paper sx={{ p: 3, boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)' }}>
+            <Paper sx={{ p: 3, mb: 3, boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)' }}>
               <Typography variant="h6" gutterBottom>
                 Change Password
               </Typography>
@@ -270,60 +326,76 @@ const ProfilePage: React.FC = () => {
               </form>
             </Paper>
 
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Account Information
-                </Typography>
-                <Box sx={{ mb: 2 }}>
-                  <Typography color="textSecondary">Email</Typography>
-                  <Typography variant="body1">{user?.email}</Typography>
+            <Paper sx={{ p: 3, boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)' }}>
+              <Typography variant="h6" gutterBottom>
+                Subscription Details
+              </Typography>
+              
+              {subscriptionLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
+                  <CircularProgress />
                 </Box>
-                <Divider sx={{ my: 2 }} />
-                <Typography variant="h6" gutterBottom>
-                  Subscription Details
-                </Typography>
-                <Box sx={{ mb: 2 }}>
-                  <Typography color="textSecondary">Current Plan</Typography>
-                  <Typography variant="body1" sx={{ textTransform: 'capitalize' }}>
-                    {user?.subscription || 'Free'}
-                  </Typography>
-                </Box>
-                {subscriptionStatus && (
+              ) : (
+                <>
                   <Box sx={{ mb: 2 }}>
-                    <Typography color="textSecondary">Status</Typography>
+                    <Typography color="textSecondary">Current Plan</Typography>
                     <Typography variant="body1" sx={{ textTransform: 'capitalize' }}>
-                      {subscriptionStatus.cancel_at_period_end 
-                        ? 'Canceling at end of period' 
-                        : subscriptionStatus.status}
+                      {user?.subscription || 'Free'}
                     </Typography>
-                    {subscriptionStatus.cancel_at_period_end && (
-                      <Typography variant="body2" color="textSecondary">
-                        Access until: {new Date(subscriptionStatus.current_period_end * 1000).toLocaleDateString()}
-                      </Typography>
+                  </Box>
+
+                  {subscriptionStatus && (
+                    <>
+                      <Box sx={{ mb: 2 }}>
+                        <Typography color="textSecondary">Status</Typography>
+                        <Typography variant="body1" sx={{ textTransform: 'capitalize' }}>
+                          {subscriptionStatus.cancel_at_period_end 
+                            ? 'Canceling at end of period' 
+                            : subscriptionStatus.status}
+                        </Typography>
+                      </Box>
+
+                      {subscriptionStatus.current_period_end && (
+                        <Box sx={{ mb: 2 }}>
+                          <Typography color="textSecondary">
+                            {subscriptionStatus.cancel_at_period_end 
+                              ? 'Access Until'
+                              : 'Next Billing Date'}
+                          </Typography>
+                          <Typography variant="body1">
+                            {formatDate(subscriptionStatus.current_period_end)}
+                          </Typography>
+                        </Box>
+                      )}
+                    </>
+                  )}
+
+                  <Box sx={{ mt: 3 }}>
+                    {user?.subscription === 'free' ? (
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={handleUpgrade}
+                        disabled={subscriptionLoading}
+                      >
+                        Upgrade Plan
+                      </Button>
+                    ) : (
+                      <Button 
+                        variant="outlined" 
+                        color="error" 
+                        onClick={() => setOpenDialog(true)}
+                        disabled={subscriptionLoading || (subscriptionStatus?.cancel_at_period_end ?? false)}
+                      >
+                        {subscriptionStatus?.cancel_at_period_end 
+                          ? 'Cancellation Pending'
+                          : 'Cancel Subscription'}
+                      </Button>
                     )}
                   </Box>
-                )}
-                <Box sx={{ mt: 2 }}>
-                  {user?.subscription === 'free' ? (
-                    <Button variant="contained" color="primary" onClick={handleUpgrade}>
-                      Upgrade Plan
-                    </Button>
-                  ) : (
-                    <Button 
-                      variant="outlined" 
-                      color="error" 
-                      onClick={() => setOpenDialog(true)}
-                      disabled={subscriptionStatus?.cancel_at_period_end}
-                    >
-                      {subscriptionStatus?.cancel_at_period_end 
-                        ? 'Cancellation Pending' 
-                        : 'Cancel Subscription'}
-                    </Button>
-                  )}
-                </Box>
-              </CardContent>
-            </Card>
+                </>
+              )}
+            </Paper>
           </Grid>
         </Grid>
       </Box>
@@ -331,17 +403,22 @@ const ProfilePage: React.FC = () => {
       <Dialog
         open={openDialog}
         onClose={() => setOpenDialog(false)}
+        aria-labelledby="cancel-dialog-title"
       >
-        <DialogTitle>Cancel Subscription</DialogTitle>
+        <DialogTitle id="cancel-dialog-title">
+          Cancel Subscription
+        </DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to cancel your subscription? You'll continue to have access to your current plan until the end of your billing period.
+            Are you sure you want to cancel your subscription? You'll continue to have access until the end of your current billing period.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>No, Keep It</Button>
-          <Button onClick={handleCancelSubscription} color="error">
-            Yes, Cancel
+          <Button onClick={() => setOpenDialog(false)} disabled={subscriptionLoading}>
+            No, Keep It
+          </Button>
+          <Button onClick={handleCancelSubscription} color="error" disabled={subscriptionLoading}>
+            {subscriptionLoading ? 'Canceling...' : 'Yes, Cancel'}
           </Button>
         </DialogActions>
       </Dialog>

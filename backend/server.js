@@ -30,9 +30,12 @@ const server = createServer(app);
 // Middleware
 // CORS configuration
 const allowedOrigins = [
-    'http://localhost:3001',                          // Local development
-    'https://liqoriceai-frontend.onrender.com',       // Production frontend
-    'https://liqorice-frontend.onrender.com'          // Alternative production frontend
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
+    'https://liqoriceai-frontend.onrender.com',
+    'https://liqorice-frontend.onrender.com'
 ];
 
 app.use(cors({
@@ -43,6 +46,7 @@ app.use(cors({
         if (allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
+            console.warn('Origin not allowed by CORS:', origin);
             callback(new Error('Not allowed by CORS'));
         }
     },

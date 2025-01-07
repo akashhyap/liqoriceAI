@@ -73,26 +73,100 @@ router.post('/create-subscription', protect, async (req, res) => {
 router.post('/cancel', protect, async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
-        if (!user.subscriptionId) {
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Check if user has a subscription
+        if (!user.subscription || user.subscription === 'free') {
             return res.status(400).json({ error: 'No active subscription found' });
         }
 
-        // Cancel the subscription at period end
-        const subscription = await stripe.subscriptions.update(user.subscriptionId, {
-            cancel_at_period_end: true
-        });
+        // Check if subscription ID exists
+        if (!user.subscriptionId) {
+            // If user has a subscription plan but no ID, just update the status
+            user.subscription = 'free';
+            user.subscriptionStatus = 'inactive';
+            await user.save();
+            return res.json({
+                message: 'Subscription cancelled successfully',
+                subscription: {
+                    status: 'inactive',
+                    cancel_at_period_end: false
+                }
+            });
+        }
 
-        // Update user's subscription status
-        user.subscriptionStatus = 'canceling';
-        await user.save();
+        // Verify stripe is initialized
+        if (!stripe) {
+            console.error('Stripe not initialized');
+            return res.status(500).json({ error: 'Payment service not available' });
+        }
 
-        res.json({
-            message: 'Subscription will be canceled at the end of the billing period',
-            subscription
-        });
+        try {
+            // Get current subscription from Stripe
+            const currentSubscription = await stripe.subscriptions.retrieve(user.subscriptionId);
+            
+            if (!currentSubscription || currentSubscription.status === 'canceled') {
+                // Subscription already cancelled in Stripe, update local status
+                user.subscription = 'free';
+                user.subscriptionStatus = 'inactive';
+                user.subscriptionId = null;
+                await user.save();
+                return res.json({
+                    message: 'Subscription was already cancelled',
+                    subscription: {
+                        status: 'inactive',
+                        cancel_at_period_end: false
+                    }
+                });
+            }
+
+            // Cancel the subscription at period end
+            const subscription = await stripe.subscriptions.update(user.subscriptionId, {
+                cancel_at_period_end: true
+            });
+
+            // Update user's subscription status
+            user.subscriptionStatus = 'canceling';
+            await user.save();
+
+            console.log('Subscription cancelled successfully:', subscription.id);
+
+            res.json({
+                message: 'Subscription will be canceled at the end of the billing period',
+                subscription: {
+                    status: subscription.status,
+                    cancel_at_period_end: subscription.cancel_at_period_end,
+                    current_period_end: subscription.current_period_end
+                }
+            });
+        } catch (stripeError) {
+            console.error('Stripe error:', stripeError);
+            
+            // If Stripe can't find the subscription, update local status
+            if (stripeError.code === 'resource_missing') {
+                user.subscription = 'free';
+                user.subscriptionStatus = 'inactive';
+                user.subscriptionId = null;
+                await user.save();
+                return res.json({
+                    message: 'Subscription cancelled successfully',
+                    subscription: {
+                        status: 'inactive',
+                        cancel_at_period_end: false
+                    }
+                });
+            }
+            
+            return res.status(400).json({ 
+                error: 'Failed to cancel subscription with payment provider',
+                details: stripeError.message
+            });
+        }
     } catch (error) {
         console.error('Subscription cancellation error:', error);
-        res.status(400).json({ error: error.message });
+        res.status(500).json({ error: 'Internal server error during cancellation' });
     }
 });
 
