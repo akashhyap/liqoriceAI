@@ -1,6 +1,7 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import { protect as auth } from '../middleware/auth.js';
+import checkChatbotLimit from '../middleware/checkChatbotLimit.js';
 import Chatbot from '../models/Chatbot.js';
 import ChatSession from '../models/ChatSession.js';
 import multer from 'multer';
@@ -122,7 +123,7 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // Create a new chatbot
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, checkChatbotLimit, async (req, res) => {
     try {
         const { name, description, settings } = req.body;
         const chatbot = new Chatbot({

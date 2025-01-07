@@ -12,6 +12,7 @@ import userRoutes from './routes/user.js';
 import authRoutes from './routes/auth.js';
 import analyticsRoutes from './routes/analytics.js';
 import trainingRoutes from './routes/training.js';
+import chatbotStatsRoutes from './routes/chatbot-stats.js';
 import { Server } from 'socket.io';
 import { createServer } from 'http';
 import logger from './services/loggerService.js';
@@ -76,6 +77,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/training', trainingRoutes);
+app.use('/api/chatbot-stats', chatbotStatsRoutes);
 
 // Serve uploads directory
 app.use('/uploads', express.static(join(__dirname, 'uploads')));

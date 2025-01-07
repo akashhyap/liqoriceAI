@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
-import { Box, CssBaseline, Container } from '@mui/material';
+import { Box, CssBaseline } from '@mui/material';
 import Navbar from './Navbar';
 import Sidebar from './Sidebar';
 
 const Layout = () => {
-  const [mobileOpen, setMobileOpen] = useState(true); // Set to true by default
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -22,12 +22,12 @@ const Layout = () => {
           flexGrow: 1,
           p: 3,
           mt: '64px',
+          width: '100%',
+          maxWidth: '100vw',
           overflowX: 'hidden',
         }}
       >
-        <Container maxWidth="lg">
-          <Outlet />
-        </Container>
+        <Outlet />
       </Box>
     </Box>
   );

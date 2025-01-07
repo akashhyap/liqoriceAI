@@ -14,7 +14,7 @@ import {
   Notifications as NotificationsIcon,
   CreditCard as CreditCardIcon,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const drawerWidth = 240;
 
@@ -25,8 +25,9 @@ interface SidebarProps {
 
 const Sidebar = ({ mobileOpen = false, onMobileClose }: SidebarProps) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const menuItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/app/dashboard' },
@@ -35,7 +36,7 @@ const Sidebar = ({ mobileOpen = false, onMobileClose }: SidebarProps) => {
   ];
 
   const drawer = (
-    <Box sx={{ mt: 8 }}>
+    <Box sx={{ mt: 8, px:2 }}>
       <List>
         {menuItems.map((item) => (
           <ListItem
@@ -47,8 +48,27 @@ const Sidebar = ({ mobileOpen = false, onMobileClose }: SidebarProps) => {
                 onMobileClose();
               }
             }}
+            selected={location.pathname === item.path}
+            sx={{
+              mb: 1,
+              px:1,
+              borderRadius: 1,
+              '&.Mui-selected': {
+                backgroundColor: 'primary.main',
+                color: 'white',
+                '& .MuiListItemIcon-root': {
+                  color: 'white',
+                },
+                '&:hover': {
+                  backgroundColor: 'primary.dark',
+                },
+              },
+              '&:hover': {
+                backgroundColor: 'rgba(0, 0, 0, 0.04)',
+              },
+            }}
           >
-            <ListItemIcon>{item.icon}</ListItemIcon>
+            <ListItemIcon sx={{ minWidth: 40 }}>{item.icon}</ListItemIcon>
             <ListItemText primary={item.text} />
           </ListItem>
         ))}
@@ -57,30 +77,41 @@ const Sidebar = ({ mobileOpen = false, onMobileClose }: SidebarProps) => {
   );
 
   return (
-    <Box component="nav">
+    <Box
+      component="nav"
+      sx={{
+        width: { md: mobileOpen ? drawerWidth : 0 },
+        flexShrink: 0,
+      }}
+    >
       <Drawer
-        variant={isMobile ? "temporary" : "persistent"}
+        variant={isMobile ? "temporary" : "permanent"}
         open={mobileOpen}
         onClose={onMobileClose}
         ModalProps={{
           keepMounted: true,
         }}
         sx={{
-          height: '100%',
-          '& .MuiDrawer-root': {
-            height: '100%',
-          },
           '& .MuiDrawer-paper': {
             width: drawerWidth,
             boxSizing: 'border-box',
-            backgroundColor: (theme) => theme.palette.background.paper,
-            position: isMobile ? 'fixed' : 'relative',
-            height: '100%',
-            boxShadow: (theme) =>
-              theme.palette.mode === 'light'
-                ? '0px 2px 8px rgba(0,0,0,0.08), 0px 8px 20px rgba(0,0,0,0.04)'
-                : '0px 2px 8px rgba(0,0,0,0.2), 0px 8px 20px rgba(0,0,0,0.12)',
-            borderRight: 'none',
+            backgroundColor: theme.palette.background.default,
+            borderRight: '1px solid',
+            borderColor: 'divider',
+            boxShadow: isMobile ? '4px 0 8px rgba(0,0,0,0.1)' : 'none',
+            top: 0,
+            zIndex: theme.zIndex.drawer,
+            visibility: {
+              xs: 'visible',
+              md: mobileOpen ? 'visible' : 'hidden'
+            },
+            transform: {
+              xs: mobileOpen ? 'translateX(0)' : 'translateX(-100%)',
+              md: 'none'
+            },
+            transition: theme.transitions.create(['transform', 'width'], {
+              duration: theme.transitions.duration.standard,
+            }),
           },
         }}
       >

@@ -6,8 +6,7 @@ const User = require('../models/User.js');
 
 const PLAN_PRICES = {
     starter: process.env.STRIPE_STARTER_PRICE_ID,
-    pro: process.env.STRIPE_PRO_PRICE_ID,
-    enterprise: process.env.STRIPE_ENTERPRISE_PRICE_ID
+    professional: process.env.STRIPE_PROFESSIONAL_PRICE_ID
 };
 
 // Create a subscription

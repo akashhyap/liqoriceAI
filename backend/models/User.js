@@ -32,7 +32,7 @@ const userSchema = new mongoose.Schema({
     },
     subscription: {
         type: String,
-        enum: ['free', 'basic', 'premium', 'enterprise'],
+        enum: ['free', 'starter', 'professional'],
         default: 'free'
     },
     apiKey: {

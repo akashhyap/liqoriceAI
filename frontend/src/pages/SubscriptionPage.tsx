@@ -1,35 +1,58 @@
 import React from 'react';
 import { Container, Box, Typography } from '@mui/material';
+import { Elements } from '@stripe/react-stripe-js';
+import { loadStripe } from '@stripe/stripe-js';
 import SubscriptionPlans from '../components/subscription/SubscriptionPlans';
+import PaymentForm from '../components/subscription/PaymentForm';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+
+// Initialize Stripe
+const stripePromise = loadStripe('pk_test_your_publishable_key');
 
 const SubscriptionPage: React.FC = () => {
     const navigate = useNavigate();
     const { user, updateUser } = useAuth();
+    const [selectedPlan, setSelectedPlan] = React.useState<string | null>(null);
+    const [clientSecret, setClientSecret] = React.useState<string>('');
 
     const handlePlanSelect = async (planId: string) => {
         try {
-            // Directly update subscription without payment
-            const response = await fetch('/api/subscription/update', {
+            setSelectedPlan(planId);
+            
+            // Create subscription intent
+            const response = await fetch('/api/subscription/create-subscription', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    planId,
-                    bypassPayment: true // Add this flag for testing
-                })
+                body: JSON.stringify({ planId })
             });
 
-            if (response.ok) {
-                const updatedUser = await response.json();
-                updateUser(updatedUser);
-                navigate('/dashboard');
+            if (!response.ok) {
+                throw new Error('Failed to create subscription');
             }
+
+            const data = await response.json();
+            setClientSecret(data.clientSecret);
         } catch (error) {
-            console.error('Error updating subscription:', error);
+            console.error('Error creating subscription:', error);
         }
+    };
+
+    const handlePaymentSuccess = async () => {
+        // Refresh user data
+        const response = await fetch('/api/user/me');
+        if (response.ok) {
+            const userData = await response.json();
+            updateUser(userData);
+        }
+        navigate('/dashboard');
+    };
+
+    const handlePaymentCancel = () => {
+        setSelectedPlan(null);
+        setClientSecret('');
     };
 
     return (
@@ -38,10 +61,20 @@ const SubscriptionPage: React.FC = () => {
                 <Typography variant="h4" gutterBottom>
                     Choose Your Plan
                 </Typography>
-                <SubscriptionPlans
-                    currentPlan={user?.subscription}
-                    onSelectPlan={handlePlanSelect}
-                />
+                {!selectedPlan ? (
+                    <SubscriptionPlans
+                        currentPlan={user?.subscription}
+                        onSelectPlan={handlePlanSelect}
+                    />
+                ) : clientSecret && (
+                    <Elements stripe={stripePromise} options={{ clientSecret }}>
+                        <PaymentForm
+                            planId={selectedPlan}
+                            onSuccess={handlePaymentSuccess}
+                            onCancel={handlePaymentCancel}
+                        />
+                    </Elements>
+                )}
             </Box>
         </Container>
     );

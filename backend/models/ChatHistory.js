@@ -10,12 +10,18 @@ const chatHistorySchema = new mongoose.Schema(
         user: {
             type: mongoose.Schema.ObjectId,
             ref: 'User',
-            required: false,  // Make optional for public chat
+            required: false,  // Optional for public chat
+        },
+        anonymousUserId: {
+            type: String,
+            required: false,
+            index: true      // Index for analytics queries
         },
         sessionId: {
             type: String,
-            required: false,  // Make optional for public chat
-            default: () => Math.random().toString(36).substring(7)  // Generate random session ID if not provided
+            required: false,
+            default: () => Math.random().toString(36).substring(7),
+            index: true      // Index for session tracking
         },
         message: {
             type: String,
@@ -28,17 +34,26 @@ const chatHistorySchema = new mongoose.Schema(
         timestamp: {
             type: Date,
             default: Date.now,
+            index: true      // Index for time-based queries
         },
         metadata: {
             sources: [String],
             confidence: Number,
             processingTime: Number,
+            userAgent: String,
+            lastActivityTime: Date,
+            ipAddress: String
         }
     },
     {
         timestamps: true,
     }
 );
+
+// Add compound indexes for analytics queries
+chatHistorySchema.index({ chatbot: 1, timestamp: -1 });
+chatHistorySchema.index({ chatbot: 1, anonymousUserId: 1, timestamp: -1 });
+chatHistorySchema.index({ chatbot: 1, sessionId: 1, timestamp: -1 });
 
 const ChatHistory = mongoose.model('ChatHistory', chatHistorySchema);
 export default ChatHistory;

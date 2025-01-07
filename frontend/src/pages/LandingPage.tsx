@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Box,
   Button,
@@ -17,10 +17,20 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import SpeedIcon from '@mui/icons-material/Speed';
 import IntegrationInstructionsIcon from '@mui/icons-material/IntegrationInstructions';
 import LandingNavbar from '../components/LandingNavbar';
+import { useAuth } from '../hooks/useAuth';
 
 const LandingPage = () => {
   const navigate = useNavigate();
   const theme = useTheme();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (user) {
+      navigate('/app/dashboard');
+    }
+  }, [user, navigate]);
+
+  if (user) return null;
 
   const features = [
     {

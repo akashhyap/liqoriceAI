@@ -55,7 +55,7 @@ export default function RegisterPage() {
       <Card sx={{ maxWidth: 400, width: '100%', mx: 2 }}>
         <CardContent sx={{ p: 4 }}>
           <Typography variant="h5" component="h1" gutterBottom textAlign="center">
-            Create your FastBots Account
+            Create your LiquoriceAI Account
           </Typography>
 
           {error && (

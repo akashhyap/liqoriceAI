@@ -33,6 +33,11 @@ interface Chatbot {
   };
 }
 
+interface ChatbotStats {
+  totalConversations: number;
+  activeUsers: number;
+}
+
 const ChatbotCard: React.FC<{ chatbot: Chatbot }> = ({ chatbot }) => {
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -57,7 +62,13 @@ const ChatbotCard: React.FC<{ chatbot: Chatbot }> = ({ chatbot }) => {
   };
 
   return (
-    <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Card sx={{
+      height: '100%', display: 'flex', flexDirection: 'column', borderRadius: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+      '&:hover': {
+        transform: 'translateY(-2px)',
+        boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+      }
+    }}>
       <CardContent sx={{ flexGrow: 1, position: 'relative' }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Typography variant="h6" component="h2">
@@ -81,23 +92,25 @@ const ChatbotCard: React.FC<{ chatbot: Chatbot }> = ({ chatbot }) => {
             </IconButton>
           </Box>
         </Box>
-        
-        <Typography variant="body2" color="text.secondary" sx={{ 
+
+        <Typography variant="body2" color="text.secondary" sx={{
           display: 'flex',
           alignItems: 'center',
           '& span': { color: '#ff9800' }
         }}>
-          Ch<span>a</span>nnels
+          Channels
         </Typography>
-        
-        <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-          <Typography variant="body2" color="text.secondary" sx={{ 
+
+        <Box sx={{
+          display: 'flex', alignItems: 'center', mt: 1
+        }}>
+          <Typography variant="body2" color="text.secondary" sx={{
             display: 'flex',
             alignItems: 'center',
             mr: 1,
             '& span': { color: '#ff9800' }
           }}>
-            St<span>a</span>tus
+            Status
           </Typography>
           <Chip
             label={chatbot.deployment?.status || 'Not Deployed'}
@@ -141,12 +154,29 @@ export default function ChatbotsPage() {
   const [chatbots, setChatbots] = useState<Chatbot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<ChatbotStats>({
+    totalConversations: 0,
+    activeUsers: 0
+  });
+
+  const fetchStats = async () => {
+    try {
+      const response = await axios.get('/api/chatbot-stats/stats');
+      setStats(response.data);
+    } catch (err: any) {
+      console.error('Failed to fetch chatbot statistics:', err);
+    }
+  };
 
   useEffect(() => {
-    const fetchChatbots = async () => {
+    const fetchData = async () => {
       try {
-        const response = await axios.get('/chatbot');
-        setChatbots(response.data.chatbots);
+        setLoading(true);
+        const [chatbotsResponse] = await Promise.all([
+          axios.get('/api/chatbot'),
+          fetchStats() // Fetch stats in parallel
+        ]);
+        setChatbots(chatbotsResponse.data.chatbots || []);
       } catch (err: any) {
         setError(err.response?.data?.message || 'Failed to fetch chatbots');
       } finally {
@@ -154,11 +184,15 @@ export default function ChatbotsPage() {
       }
     };
 
-    fetchChatbots();
+    fetchData();
+
+    // Set up polling for stats every 5 minutes
+    const statsInterval = setInterval(fetchStats, 5 * 60 * 1000);
+    return () => clearInterval(statsInterval);
   }, []);
 
   const handleCreateNew = () => {
-    navigate('/app/dashboard');
+    navigate('/app/chatbot/new');
   };
 
   if (loading) {
@@ -190,6 +224,54 @@ export default function ChatbotsPage() {
           Create New Chatbot
         </Button>
       </Box>
+
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} sm={4}>
+          <Card sx={{ height: '100%', borderRadius: 2 }}>
+            <CardContent>
+              <Typography variant="h3" component="div" gutterBottom>
+                {chatbots.length}
+              </Typography>
+              <Typography color="text.secondary">
+                Total Chatbots
+              </Typography>
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                Active bots in your account
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <Card sx={{ height: '100%', borderRadius: 2 }}>
+            <CardContent>
+              <Typography variant="h3" component="div" gutterBottom>
+                {stats.totalConversations.toLocaleString()}
+              </Typography>
+              <Typography color="text.secondary">
+                Total Conversations
+              </Typography>
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                Messages exchanged
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <Card sx={{ height: '100%', borderRadius: 2 }}>
+            <CardContent>
+              <Typography variant="h3" component="div" gutterBottom>
+                {stats.activeUsers.toLocaleString()}
+              </Typography>
+              <Typography color="text.secondary">
+                Active Users
+              </Typography>
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                Users interacting with bots
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
 
       {chatbots.length === 0 ? (
         <Card sx={{ textAlign: 'center', py: 8, px: 2 }}>

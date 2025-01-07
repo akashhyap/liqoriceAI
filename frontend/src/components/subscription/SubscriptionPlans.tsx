@@ -29,10 +29,9 @@ const plans: Plan[] = [
         price: 0,
         features: [
             '1 Chatbot',
-            '100 messages/month',
-            'Basic analytics',
-            'Email support',
-            'Basic customization'
+            'Basic customization',
+            'Community support',
+            'Standard response time'
         ],
         recommended: false
     },
@@ -41,29 +40,30 @@ const plans: Plan[] = [
         name: 'Starter',
         price: 29,
         features: [
-            '3 Chatbots',
-            '1,000 messages/month',
-            'Basic analytics',
+            '5 Chatbots',
+            'Advanced customization',
             'Email support',
-            'Basic customization',
+            'Priority response time',
+            'Basic analytics',
             'API access'
         ],
-        recommended: false
+        recommended: true
     },
     {
-        id: 'pro',
+        id: 'professional',
         name: 'Professional',
-        price: 79,
+        price: 99,
         features: [
-            '10 Chatbots',
-            '10,000 messages/month',
-            'Advanced analytics',
-            'Priority support',
+            'Unlimited Chatbots',
             'Full customization',
+            'Priority support',
+            'Instant response time',
+            'Advanced analytics',
             'API access',
-            'Custom domain'
+            'Custom branding',
+            'Team collaboration'
         ],
-        recommended: true
+        recommended: false
     }
 ];
 

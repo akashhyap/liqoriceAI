@@ -3,7 +3,7 @@ export interface User {
     name: string;
     email: string;
     role: 'user' | 'admin';
-    subscription: 'free' | 'starter' | 'pro';
+    subscription: 'free' | 'starter' | 'professional';
     usage: {
         messages: number;
         storage: number;
@@ -94,7 +94,7 @@ export interface ChatbotState {
 }
 
 export interface Plan {
-    id: 'free' | 'starter' | 'pro';
+    id: 'free' | 'starter' | 'professional';
     name: string;
     price: number;
     features: string[];

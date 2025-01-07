@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -13,8 +13,9 @@ import {
   useMediaQuery,
   CircularProgress,
   IconButton,
+  Paper,
 } from '@mui/material';
-import { Add as AddIcon, Close as CloseIcon } from '@mui/icons-material';
+import { Add as AddIcon, Close as CloseIcon, Message as MessageIcon, People as PeopleIcon } from '@mui/icons-material';
 import ChatbotForm from '../components/chatbot/ChatbotForm';
 import ChatbotList from '../components/chatbot/ChatbotList';
 import { useAuth } from '../context/AuthContext';
@@ -24,19 +25,44 @@ import { Chatbot } from '../types';
 
 interface DashboardPageProps { }
 
+interface DashboardStats {
+  totalConversations: number;
+  activeUsers: number;
+}
+
 const DashboardPage: React.FC<DashboardPageProps> = () => {
   const [openCreateDialog, setOpenCreateDialog] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [stats, setStats] = useState<DashboardStats>({
+    totalConversations: 0,
+    activeUsers: 0
+  });
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('md'));
   const { user } = useAuth();
   const { chatbots = [], isLoading, error, fetchChatbots } = useChatbots();
 
+  const fetchStats = async () => {
+    try {
+      const response = await axios.get('/api/analytics/stats');
+      setStats(response.data);
+    } catch (err) {
+      console.error('Failed to fetch dashboard stats:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchStats();
+    // Refresh stats every 5 minutes
+    const interval = setInterval(fetchStats, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   if (isLoading) {
     return (
       <Container>
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-          <Typography>Loading chatbots...</Typography>
+          <CircularProgress />
         </Box>
       </Container>
     );
@@ -73,182 +99,198 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 4 }}>
-        <Typography variant="h4" component="h1">
-          My Chatbots
-        </Typography>
-        <Button
-          variant="contained"
-          color="primary"
-          startIcon={<AddIcon />}
-          onClick={() => setOpenCreateDialog(true)}
-          sx={{ borderRadius: '8px', color: '#ffffff' }}
-        >
-          Create Chatbot
-        </Button>
-      </Box>
-
-      {/* Quick Stats */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={4}>
-          <Card sx={{ boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)', borderRadius: '8px' }}>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Total Chatbots
-              </Typography>
-              <Typography variant="h5" component="div">
-                {chatbots.length}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <Card sx={{ boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)', borderRadius: '8px' }}>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Total Conversations
-              </Typography>
-              <Typography variant="h5" component="div">
-                0
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <Card sx={{ boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)', borderRadius: '8px' }}>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Active Users
-              </Typography>
-              <Typography variant="h5" component="div">
-                0
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {/* Chatbot List */}
-      <ChatbotList
-        chatbots={chatbots}
-        onEdit={handleEdit}
-      />
-
-      {/* Create Bot Dialog */}
-      <Dialog
-        open={openCreateDialog}
-        onClose={() => setOpenCreateDialog(false)}
-        fullScreen={fullScreen}
-        maxWidth="md"
-        fullWidth
-        PaperProps={{
-          sx: {
-            borderRadius: '12px',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
-            background: theme.palette.background.paper,
-            maxHeight: '90vh',
-            overflow: 'hidden',
-          }
-        }}
-      >
-        {/* Fixed Header */}
-        <Box
-          sx={{
-            p: 3,
-            background: theme.palette.primary.main,
-            color: 'white',
-            borderTopLeftRadius: '12px',
-            borderTopRightRadius: '12px',
-            position: 'sticky',
-            top: 0,
-            zIndex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          {/* Close Button */}
-          <IconButton
-            onClick={() => setOpenCreateDialog(false)}
-            sx={{
-              position: 'absolute',
-              right: 8,
-              top: 8,
-              color: 'white',
-              '&:hover': {
-                background: 'rgba(255, 255, 255, 0.1)',
-              },
-            }}
-          >
-            <CloseIcon />
-          </IconButton>
-        
+    <Box
+      sx={{
+        backgroundColor: theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.1)' : '#f8fafc',
+        minHeight: 'calc(100vh - 64px)',
+        width: '100%',
+        py: 4,
+        px: { xs: 2, sm: 3, md: 4 }
+      }}
+    >
+      <Box sx={{ maxWidth: 'lg', mx: 'auto', px: { xs: 2, sm: 3 } }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
           <Typography
-            variant="h5"
-            component="h2"
+            variant="h4"
+            component="h1"
             sx={{
               fontWeight: 600,
-              mb: 1,
-              color: '#ffffff',
-              textAlign: 'center'
+              color: theme.palette.mode === 'dark' ? '#fff' : '#1a2027'
             }}
           >
-            Create New Chatbot
+            Chatbots
           </Typography>
-          <Typography variant="body2" sx={{ opacity: 0.8, textAlign: 'center' }}>
-            Configure your chatbot's settings and behavior
-          </Typography>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setOpenCreateDialog(true)}
+            sx={{
+              borderRadius: '12px',
+              textTransform: 'none',
+              px: 3,
+              py: 1,
+              backgroundColor: theme.palette.primary.main,
+              '&:hover': {
+                backgroundColor: theme.palette.primary.dark,
+              },
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+            }}
+          >
+            CREATE CHATBOT
+          </Button>
         </Box>
 
-        {/* Scrollable Content Container */}
-        <Box
-          sx={{
-            maxHeight: 'calc(90vh - 100px)', // Account for header height
-            overflow: 'auto',
-            '&::-webkit-scrollbar': {
-              width: '6px',
-              backgroundColor: 'transparent',
-            },
-            '&::-webkit-scrollbar-thumb': {
-              backgroundColor: 'rgba(0, 0, 0, 0.2)',
-              borderRadius: '3px',
-              '&:hover': {
-                backgroundColor: 'rgba(0, 0, 0, 0.3)',
-              },
-            },
-            '&::-webkit-scrollbar-track': {
-              backgroundColor: 'transparent',
-            },
-          }}
-        >
-          {/* Error Message */}
-          {createError && (
-            <Box
+        {/* Stats Cards */}
+        <Grid container spacing={3} sx={{ mb: 4 }}>
+          <Grid item xs={12} md={4}>
+            <Paper
+              elevation={0}
               sx={{
-                p: 2,
-                mx: 3,
-                mt: 2,
-                bgcolor: 'error.light',
-                borderRadius: 1,
-                color: 'error.main',
+                p: 3,
+                borderRadius: '16px',
+                backgroundColor: '#fff',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                '&:hover': {
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                },
               }}
             >
-              <Typography variant="body2">{createError}</Typography>
-            </Box>
-          )}
+              <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>
+                Total Chatbots
+              </Typography>
+              <Typography variant="h3" sx={{ fontWeight: 600, mb: 1 }}>
+                {chatbots.length}
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                Active bots in your account
+              </Typography>
+            </Paper>
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <Paper
+              elevation={0}
+              sx={{
+                p: 3,
+                borderRadius: '16px',
+                backgroundColor: '#fff',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                '&:hover': {
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                },
+              }}
+            >
+              <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>
+                Total Conversations
+              </Typography>
+              <Typography variant="h3" sx={{ fontWeight: 600, mb: 1 }}>
+                {stats.totalConversations.toLocaleString()}
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                Messages exchanged
+              </Typography>
+            </Paper>
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <Paper
+              elevation={0}
+              sx={{
+                p: 3,
+                borderRadius: '16px',
+                backgroundColor: '#fff',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                '&:hover': {
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                },
+              }}
+            >
+              <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>
+                Active Users
+              </Typography>
+              <Typography variant="h3" sx={{ fontWeight: 600, mb: 1 }}>
+                {stats.activeUsers.toLocaleString()}
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                Users interacting with bots
+              </Typography>
+            </Paper>
+          </Grid>
+        </Grid>
 
-          {/* Form Container */}
+        {/* Chatbots List */}
+        {chatbots.length > 0 ? (
+          <ChatbotList chatbots={chatbots} onEdit={handleEdit} />
+        ) : (
           <Box
             sx={{
-              p: 3,
-              boxSizing: 'border-box',
+              textAlign: 'center',
+              py: 8,
+              px: 3,
+              backgroundColor: '#fff',
+              borderRadius: '16px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
             }}
           >
-            <ChatbotForm onSubmit={handleCreateBot} />
+            <Typography variant="h6" sx={{ mb: 2, color: 'text.secondary' }}>
+              No chatbots yet
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 3, color: 'text.secondary' }}>
+              Create your first chatbot to get started
+            </Typography>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setOpenCreateDialog(true)}
+              sx={{
+                borderRadius: '12px',
+                textTransform: 'none',
+                px: 4,
+                py: 1.5,
+              }}
+            >
+              Create Chatbot
+            </Button>
           </Box>
-        </Box>
-      </Dialog>
-    </Container>
+        )}
+
+        {/* Create Chatbot Dialog */}
+        <Dialog
+          fullScreen={fullScreen}
+          open={openCreateDialog}
+          onClose={() => setOpenCreateDialog(false)}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: '16px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            }
+          }}
+        >
+          <DialogContent>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h6" component="h2">
+                Create New Chatbot
+              </Typography>
+              <IconButton onClick={() => setOpenCreateDialog(false)}>
+                <CloseIcon />
+              </IconButton>
+            </Box>
+            {createError && (
+              <Typography color="error" sx={{ mb: 2 }}>
+                {createError}
+              </Typography>
+            )}
+            <ChatbotForm onSubmit={handleCreateBot} />
+          </DialogContent>
+        </Dialog>
+      </Box>
+    </Box>
   );
 };
 

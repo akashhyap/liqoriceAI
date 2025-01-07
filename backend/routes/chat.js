@@ -37,12 +37,14 @@ router.options('*', chatCors);
 // Public endpoint for widget chat
 router.post('/:chatbotId', async (req, res) => {
     try {
-        const { message } = req.body;
+        const { message, sessionId, userId } = req.body;
         const { chatbotId } = req.params;
 
         console.log('Received chat request:', {
             chatbotId,
             message,
+            sessionId,
+            userId,
             body: req.body
         });
 
@@ -68,23 +70,29 @@ router.post('/:chatbotId', async (req, res) => {
         const response = await chatService.generateResponse(chatbot, message);
         console.log('Generated response:', response);
         
-        // Save chat history
+        // Generate sessionId if not provided
+        const currentSessionId = sessionId || Math.random().toString(36).substring(7);
+        
+        // Save chat history with session and user info
         const chatHistory = new ChatHistory({
             chatbot: chatbotId,
             message,
-            response: response.response, // Save only the response text
+            response: response.response,
+            sessionId: currentSessionId,
+            userId: userId || currentSessionId, // Use sessionId as userId if not provided
             timestamp: new Date(),
             metadata: {
-                sources: response.sources.map(source => JSON.stringify(source)) // Convert source objects to strings
+                sources: response.sources.map(source => JSON.stringify(source))
             }
         });
         await chatHistory.save();
-        console.log('Saved chat history');
+        console.log('Saved chat history with session:', currentSessionId);
 
         res.json({
             success: true,
             message: response.response,
-            sources: response.sources
+            sources: response.sources,
+            sessionId: currentSessionId // Return sessionId to client
         });
     } catch (error) {
         console.error('Error in chat endpoint:', {

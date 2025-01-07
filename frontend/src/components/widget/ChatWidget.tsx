@@ -31,12 +31,109 @@ interface ChatWidgetProps {
   };
 }
 
+// Function to generate a fingerprint-based user ID
+const generateUserId = () => {
+  const userAgent = navigator.userAgent;
+  const screenResolution = `${window.screen.width}x${window.screen.height}`;
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const language = navigator.language;
+  
+  // Combine these values and hash them
+  const fingerprint = `${userAgent}-${screenResolution}-${timezone}-${language}`;
+  return btoa(fingerprint).substring(0, 32); // Base64 encode and trim
+};
+
+// Function to generate a session ID with timestamp
+const generateSessionId = () => {
+  return `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+};
+
 export default function ChatWidget({ botId, config }: ChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [lastActivity, setLastActivity] = useState<number>(Date.now());
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes in milliseconds
+
+  useEffect(() => {
+    // Get or generate persistent user ID
+    const storedUserId = localStorage.getItem(`chat_user_${botId}`);
+    if (storedUserId) {
+      setUserId(storedUserId);
+    } else {
+      const newUserId = generateUserId();
+      localStorage.setItem(`chat_user_${botId}`, newUserId);
+      setUserId(newUserId);
+    }
+  }, [botId]);
+
+  useEffect(() => {
+    // Handle session management
+    const checkAndUpdateSession = () => {
+      const currentTime = Date.now();
+      const storedSessionData = localStorage.getItem(`chat_session_${botId}`);
+      
+      if (storedSessionData) {
+        const { id, timestamp } = JSON.parse(storedSessionData);
+        
+        // Check if session has expired
+        if (currentTime - timestamp > SESSION_TIMEOUT) {
+          // Create new session if expired
+          const newSessionId = generateSessionId();
+          localStorage.setItem(`chat_session_${botId}`, JSON.stringify({
+            id: newSessionId,
+            timestamp: currentTime
+          }));
+          setSessionId(newSessionId);
+        } else {
+          setSessionId(id);
+        }
+      } else {
+        // Create new session if none exists
+        const newSessionId = generateSessionId();
+        localStorage.setItem(`chat_session_${botId}`, JSON.stringify({
+          id: newSessionId,
+          timestamp: currentTime
+        }));
+        setSessionId(newSessionId);
+      }
+    };
+
+    // Check session when widget opens
+    if (isOpen) {
+      checkAndUpdateSession();
+    }
+  }, [botId, isOpen]);
+
+  // Update last activity timestamp
+  useEffect(() => {
+    if (isOpen) {
+      const updateActivity = () => {
+        setLastActivity(Date.now());
+        const sessionData = localStorage.getItem(`chat_session_${botId}`);
+        if (sessionData) {
+          const { id } = JSON.parse(sessionData);
+          localStorage.setItem(`chat_session_${botId}`, JSON.stringify({
+            id,
+            timestamp: Date.now()
+          }));
+        }
+      };
+
+      // Update activity on user interaction
+      window.addEventListener('mousemove', updateActivity);
+      window.addEventListener('keypress', updateActivity);
+
+      return () => {
+        window.removeEventListener('mousemove', updateActivity);
+        window.removeEventListener('keypress', updateActivity);
+      };
+    }
+  }, [isOpen, botId]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -61,8 +158,11 @@ export default function ChatWidget({ botId, config }: ChatWidgetProps) {
     setIsTyping(true);
 
     try {
-      const response = await axios.post(`/chat/${botId}`, {
+      const response = await axios.post(`/api/chatbot/${botId}/chat`, {
         message: input,
+        sessionId,
+        userId,
+        timestamp: Date.now()
       });
 
       const botMessage: Message = {
@@ -73,6 +173,7 @@ export default function ChatWidget({ botId, config }: ChatWidgetProps) {
       };
 
       setMessages((prev) => [...prev, botMessage]);
+      setLastActivity(Date.now());
     } catch (error) {
       console.error('Chat error:', error);
       const errorMessage: Message = {

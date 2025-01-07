@@ -23,14 +23,13 @@ const Navbar = ({ onMenuClick }: NavbarProps) => {
 
   const handleLogout = () => {
     logout();
-    navigate('/');
-    handleMenuClose();
+    navigate('/login');
   };
 
   return (
-    <AppBar 
-      position="fixed" 
-      sx={{ 
+    <AppBar
+      position="fixed"
+      sx={{
         zIndex: (theme) => theme.zIndex.drawer + 1,
         backgroundColor: (theme) => theme.palette.primary.main
       }}
@@ -46,16 +45,37 @@ const Navbar = ({ onMenuClick }: NavbarProps) => {
         >
           <MenuIcon />
         </IconButton>
-        <Typography variant="h6" component="div" sx={{ flexGrow: 1, color: '#ffffff'  }}>
-          LiquoriceAI
-        </Typography>
+        <Box
+          component="img"
+          src="/licorice-logo.png"
+          alt="LiquoriceAI Logo"
+          sx={{
+            height: '40px',
+            cursor: 'pointer',
+            marginRight: 'auto',
+            filter: 'brightness(0) invert(1)',
+            WebkitFilter: 'brightness(0) invert(1)'
+          }}
+          onClick={() => navigate('/')}
+        />
         <Box>
-          <IconButton 
-            color="inherit"
+          <IconButton
             onClick={handleMenuOpen}
+            sx={{
+              padding: 0.5,
+              border: '2px solid',
+              borderColor: 'white',
+            }}
           >
-            <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
-              {user?.name?.charAt(0) || <AccountCircle />}
+            <Avatar
+              sx={{
+                width: 32,
+                height: 32,
+                bgcolor: 'white',
+                color: 'primary.main',
+              }}
+            >
+              {user?.email?.[0].toUpperCase()}
             </Avatar>
           </IconButton>
           <Menu
@@ -66,44 +86,46 @@ const Navbar = ({ onMenuClick }: NavbarProps) => {
             transformOrigin={{ horizontal: 'right', vertical: 'top' }}
             anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
             PaperProps={{
+              elevation: 0,
               sx: {
-                width: '220px',
+                width: '240px',
                 mt: 1.5,
+                overflow: 'visible',
+                filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.32))',
                 '& .MuiMenuItem-root': {
                   px: 2,
                   py: 1,
-                  typography: 'body2',
-                  borderRadius: 0.75,
-                  '&:hover': {
-                    backgroundColor: 'action.hover',
-                  },
+                  borderRadius: 1,
+                  mx: 1,
+                  mb: 0.5,
                 },
               },
             }}
           >
-            <Box sx={{ px: 2, py: 1.5 }}>
-              <Typography variant="body1" noWrap>
-                {user?.name || 'User'}
-              </Typography>
-              <Typography variant="body2" sx={{ color: 'text.secondary' }} noWrap>
-                {user?.email || ''}
-              </Typography>
+            <Box sx={{ 
+              p: 2, 
+              pb: 1.5,
+              borderBottom: '1px solid',
+              borderColor: 'divider',
+            }}>
+              {user?.email}
             </Box>
-            
-            <Divider sx={{ borderStyle: 'dashed' }} />
 
-            <MenuItem onClick={() => navigate('/app/dashboard/profile')} sx={{ m: 1 }}>
-              <ListItemIcon>
-                <PersonIcon fontSize="small" />
-              </ListItemIcon>
-              Profile
-            </MenuItem>
-            <MenuItem onClick={handleLogout} sx={{ m: 1, color: 'error.main' }}>
-              <ListItemIcon>
-                <LogoutIcon fontSize="small" sx={{ color: 'error.main' }} />
-              </ListItemIcon>
-              Logout
-            </MenuItem>
+            <Box sx={{ mt: 1 }}>
+              <MenuItem onClick={() => navigate('/app/dashboard/profile')}>
+                <ListItemIcon>
+                  <PersonIcon fontSize="small" />
+                </ListItemIcon>
+                Profile
+              </MenuItem>
+
+              <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
+                <ListItemIcon>
+                  <LogoutIcon fontSize="small" color="error" />
+                </ListItemIcon>
+                Logout
+              </MenuItem>
+            </Box>
           </Menu>
         </Box>
       </Toolbar>
