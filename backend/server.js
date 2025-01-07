@@ -13,6 +13,7 @@ import authRoutes from './routes/auth.js';
 import analyticsRoutes from './routes/analytics.js';
 import trainingRoutes from './routes/training.js';
 import chatbotStatsRoutes from './routes/chatbot-stats.js';
+import subscriptionRoutes from './routes/subscription.js';
 import { Server } from 'socket.io';
 import { createServer } from 'http';
 import logger from './services/loggerService.js';
@@ -78,6 +79,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/training', trainingRoutes);
 app.use('/api/chatbot-stats', chatbotStatsRoutes);
+app.use('/api/subscription', subscriptionRoutes);
 
 // Serve uploads directory
 app.use('/uploads', express.static(join(__dirname, 'uploads')));

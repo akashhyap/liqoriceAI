@@ -1,7 +1,7 @@
-import React from 'react';
-import { Container, Box, Typography, Alert, CircularProgress } from '@mui/material';
-import { Elements } from '@stripe/react-stripe-js';
+import React, { useState } from 'react';
+import { Box, Container, Typography, Alert, CircularProgress } from '@mui/material';
 import { loadStripe } from '@stripe/stripe-js';
+import { Elements } from '@stripe/react-stripe-js';
 import SubscriptionPlans from '../components/subscription/SubscriptionPlans';
 import PaymentForm from '../components/subscription/PaymentForm';
 import { useNavigate } from 'react-router-dom';
@@ -10,22 +10,21 @@ import { useAuth } from '../hooks/useAuth';
 // Initialize Stripe
 const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY!);
 
-const SubscriptionPage: React.FC = () => {
-    const navigate = useNavigate();
+const SubscriptionPageContent: React.FC = () => {
     const { user, updateUser } = useAuth();
-    const [selectedPlan, setSelectedPlan] = React.useState<string | null>(null);
-    const [clientSecret, setClientSecret] = React.useState<string>('');
-    const [error, setError] = React.useState<string>('');
-    const [loading, setLoading] = React.useState(false);
+    const navigate = useNavigate();
+    const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [showPaymentForm, setShowPaymentForm] = useState(false);
 
     const handlePlanSelect = async (planId: string) => {
-        try {
+        setError(null);
+        setSelectedPlan(planId);
+
+        if (planId === 'free') {
             setLoading(true);
-            setError('');
-            setSelectedPlan(planId);
-            
-            // Skip payment for free plan
-            if (planId === 'free') {
+            try {
                 const response = await fetch(`${process.env.REACT_APP_API_URL}/subscription/update`, {
                     method: 'POST',
                     headers: {
@@ -42,66 +41,46 @@ const SubscriptionPage: React.FC = () => {
 
                 const userData = await response.json();
                 updateUser(userData);
-                navigate('/dashboard');
-                return;
+                navigate('/app/dashboard');
+            } catch (err: any) {
+                console.error('Error updating to free plan:', err);
+                setError(err.message || 'Failed to update subscription');
+            } finally {
+                setLoading(false);
             }
-            
-            // Create subscription intent for paid plans
-            const response = await fetch(`${process.env.REACT_APP_API_URL}/subscription/create-subscription`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
-                body: JSON.stringify({ planId })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Failed to create subscription');
-            }
-
-            const data = await response.json();
-            if (!data.clientSecret) {
-                throw new Error('No client secret received');
-            }
-            setClientSecret(data.clientSecret);
-        } catch (err: any) {
-            console.error('Error creating subscription:', err);
-            setError(err.message || 'An error occurred while processing your request');
-            setSelectedPlan(null);
-        } finally {
-            setLoading(false);
+        } else {
+            setShowPaymentForm(true);
         }
     };
 
     const handlePaymentSuccess = async () => {
         try {
-            // Refresh user data
-            const response = await fetch(`${process.env.REACT_APP_API_URL}/user/me`, {
+            const userResponse = await fetch(`${process.env.REACT_APP_API_URL}/users/me`, {
                 headers: {
                     'Authorization': `Bearer ${localStorage.getItem('token')}`
                 }
             });
-            if (response.ok) {
-                const userData = await response.json();
+            
+            if (userResponse.ok) {
+                const userData = await userResponse.json();
                 updateUser(userData);
             }
-            navigate('/dashboard');
-        } catch (err) {
+            navigate('/app/dashboard');
+        } catch (err: any) {
             console.error('Error updating user data:', err);
+            setError(err.message || 'Failed to update user data');
         }
     };
 
     const handlePaymentCancel = () => {
         setSelectedPlan(null);
-        setClientSecret('');
-        setError('');
+        setShowPaymentForm(false);
+        setError(null);
     };
 
     return (
         <Container maxWidth="lg">
-            <Box sx={{ width: '100%', mt: 4 }}>
+            <Box sx={{ mt: 4, mb: 4 }}>
                 <Typography variant="h4" gutterBottom>
                     Choose Your Plan
                 </Typography>
@@ -112,27 +91,38 @@ const SubscriptionPage: React.FC = () => {
                     </Alert>
                 )}
 
-                {loading ? (
+                {loading && (
                     <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
                         <CircularProgress />
                     </Box>
-                ) : !selectedPlan || selectedPlan === 'free' ? (
-                    <SubscriptionPlans
-                        currentPlan={user?.subscription}
-                        onSelectPlan={handlePlanSelect}
-                    />
-                ) : clientSecret && (
-                    <Elements stripe={stripePromise} options={{ clientSecret }}>
+                )}
+
+                <SubscriptionPlans
+                    onSelectPlan={handlePlanSelect}
+                    selectedPlan={selectedPlan}
+                    currentPlan={user?.subscription || 'free'}
+                    disabled={loading || showPaymentForm}
+                />
+
+                {showPaymentForm && selectedPlan && selectedPlan !== 'free' && (
+                    <Box sx={{ mt: 4 }}>
                         <PaymentForm
                             planId={selectedPlan}
                             onSuccess={handlePaymentSuccess}
                             onCancel={handlePaymentCancel}
                         />
-                    </Elements>
+                    </Box>
                 )}
             </Box>
         </Container>
     );
 };
+
+// Wrap the component with Stripe Elements
+const SubscriptionPage: React.FC = () => (
+    <Elements stripe={stripePromise}>
+        <SubscriptionPageContent />
+    </Elements>
+);
 
 export default SubscriptionPage;

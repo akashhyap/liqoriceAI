@@ -44,7 +44,11 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
 
   const fetchStats = async () => {
     try {
-      const response = await axios.get('/api/analytics/stats');
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}/analytics/stats`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
       setStats(response.data);
     } catch (err) {
       console.error('Failed to fetch dashboard stats:', err);

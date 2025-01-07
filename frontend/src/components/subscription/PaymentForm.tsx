@@ -6,7 +6,8 @@ import {
     CardContent,
     TextField,
     Typography,
-    Alert
+    Alert,
+    Grid
 } from '@mui/material';
 import {
     CardElement,
@@ -48,7 +49,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
             }
 
             // Create payment method
-            const { error: cardError, paymentMethod } = await stripe.createPaymentMethod({
+            const { error: paymentMethodError, paymentMethod } = await stripe.createPaymentMethod({
                 type: 'card',
                 card: cardElement,
                 billing_details: {
@@ -56,11 +57,11 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
                 }
             });
 
-            if (cardError) {
-                throw cardError;
+            if (paymentMethodError) {
+                throw paymentMethodError;
             }
 
-            // Create subscription with payment method
+            // Create subscription
             const response = await fetch(`${process.env.REACT_APP_API_URL}/subscription/create-subscription`, {
                 method: 'POST',
                 headers: {
@@ -76,7 +77,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.message || 'Failed to create subscription');
+                throw new Error(errorData.error || 'Failed to create subscription');
             }
 
             const { clientSecret } = await response.json();
@@ -90,55 +91,61 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
 
             onSuccess();
         } catch (err: any) {
+            console.error('Payment error:', err);
             setError(err.message || 'An error occurred');
+        } finally {
             setProcessing(false);
         }
     };
 
     return (
-        <Box component="form" onSubmit={handleSubmit}>
-            <Card>
-                <CardContent>
-                    <Typography variant="h6" gutterBottom>
-                        Payment Details
-                    </Typography>
+        <Card>
+            <CardContent>
+                <Typography variant="h6" gutterBottom>
+                    Payment Details
+                </Typography>
 
-                    {error && (
-                        <Alert severity="error" sx={{ mb: 2 }}>
-                            {error}
-                        </Alert>
-                    )}
+                {error && (
+                    <Alert severity="error" sx={{ mb: 2 }}>
+                        {error}
+                    </Alert>
+                )}
 
-                    <TextField
-                        fullWidth
-                        type="email"
-                        label="Email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                        sx={{ mb: 2 }}
-                    />
-
-                    <Box sx={{ mb: 2 }}>
-                        <CardElement
-                            options={{
-                                style: {
-                                    base: {
-                                        fontSize: '16px',
-                                        color: '#424770',
-                                        '::placeholder': {
-                                            color: '#aab7c4'
+                <Box component="form" onSubmit={handleSubmit}>
+                    <Grid container spacing={3}>
+                        <Grid item xs={12}>
+                            <TextField
+                                fullWidth
+                                type="email"
+                                label="Email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                required
+                            />
+                        </Grid>
+                        <Grid item xs={12}>
+                            <Box sx={{ p: 2, border: '1px solid rgba(0, 0, 0, 0.12)', borderRadius: 1 }}>
+                                <CardElement
+                                    options={{
+                                        style: {
+                                            base: {
+                                                fontSize: '16px',
+                                                color: '#424770',
+                                                '::placeholder': {
+                                                    color: '#aab7c4'
+                                                }
+                                            },
+                                            invalid: {
+                                                color: '#9e2146'
+                                            }
                                         }
-                                    },
-                                    invalid: {
-                                        color: '#9e2146'
-                                    }
-                                }
-                            }}
-                        />
-                    </Box>
+                                    }}
+                                />
+                            </Box>
+                        </Grid>
+                    </Grid>
 
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 3 }}>
                         <Button
                             type="button"
                             onClick={onCancel}
@@ -154,9 +161,9 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
                             {processing ? 'Processing...' : 'Subscribe'}
                         </Button>
                     </Box>
-                </CardContent>
-            </Card>
-        </Box>
+                </Box>
+            </CardContent>
+        </Card>
     );
 };
 

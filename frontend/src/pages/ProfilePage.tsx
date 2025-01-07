@@ -10,21 +10,35 @@ import {
   Grid,
   Avatar,
   CircularProgress,
+  Card,
+  CardContent,
+  Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
 } from '@mui/material';
 import { PasswordUpdateRequest } from '../types';
 import useAuthStore from '../store/authStore';
+import { useNavigate } from 'react-router-dom';
 
 const ProfilePage: React.FC = () => {
   const { user, updateUser, isLoading, loadUser } = useAuthStore();
+  const navigate = useNavigate();
   const [name, setName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [openDialog, setOpenDialog] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null);
 
   useEffect(() => {
     loadUser();
+    fetchSubscriptionStatus();
   }, [loadUser]);
 
   useEffect(() => {
@@ -88,6 +102,47 @@ const ProfilePage: React.FC = () => {
     }
   };
 
+  const fetchSubscriptionStatus = async () => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/subscription/status`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSubscriptionStatus(data.subscription);
+      }
+    } catch (err) {
+      console.error('Error fetching subscription status:', err);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/subscription/cancel`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to cancel subscription');
+      }
+
+      await fetchSubscriptionStatus();
+      setOpenDialog(false);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleUpgrade = () => {
+    navigate('/app/subscription');
+  };
+
   return (
     <Container maxWidth="lg">
       <Box sx={{ mt: 4, mb: 4 }}>
@@ -102,6 +157,12 @@ const ProfilePage: React.FC = () => {
             onClose={() => setMessage(null)}
           >
             {message.text}
+          </Alert>
+        )}
+
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
           </Alert>
         )}
 
@@ -208,9 +269,82 @@ const ProfilePage: React.FC = () => {
                 </Button>
               </form>
             </Paper>
+
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Account Information
+                </Typography>
+                <Box sx={{ mb: 2 }}>
+                  <Typography color="textSecondary">Email</Typography>
+                  <Typography variant="body1">{user?.email}</Typography>
+                </Box>
+                <Divider sx={{ my: 2 }} />
+                <Typography variant="h6" gutterBottom>
+                  Subscription Details
+                </Typography>
+                <Box sx={{ mb: 2 }}>
+                  <Typography color="textSecondary">Current Plan</Typography>
+                  <Typography variant="body1" sx={{ textTransform: 'capitalize' }}>
+                    {user?.subscription || 'Free'}
+                  </Typography>
+                </Box>
+                {subscriptionStatus && (
+                  <Box sx={{ mb: 2 }}>
+                    <Typography color="textSecondary">Status</Typography>
+                    <Typography variant="body1" sx={{ textTransform: 'capitalize' }}>
+                      {subscriptionStatus.cancel_at_period_end 
+                        ? 'Canceling at end of period' 
+                        : subscriptionStatus.status}
+                    </Typography>
+                    {subscriptionStatus.cancel_at_period_end && (
+                      <Typography variant="body2" color="textSecondary">
+                        Access until: {new Date(subscriptionStatus.current_period_end * 1000).toLocaleDateString()}
+                      </Typography>
+                    )}
+                  </Box>
+                )}
+                <Box sx={{ mt: 2 }}>
+                  {user?.subscription === 'free' ? (
+                    <Button variant="contained" color="primary" onClick={handleUpgrade}>
+                      Upgrade Plan
+                    </Button>
+                  ) : (
+                    <Button 
+                      variant="outlined" 
+                      color="error" 
+                      onClick={() => setOpenDialog(true)}
+                      disabled={subscriptionStatus?.cancel_at_period_end}
+                    >
+                      {subscriptionStatus?.cancel_at_period_end 
+                        ? 'Cancellation Pending' 
+                        : 'Cancel Subscription'}
+                    </Button>
+                  )}
+                </Box>
+              </CardContent>
+            </Card>
           </Grid>
         </Grid>
       </Box>
+
+      <Dialog
+        open={openDialog}
+        onClose={() => setOpenDialog(false)}
+      >
+        <DialogTitle>Cancel Subscription</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to cancel your subscription? You'll continue to have access to your current plan until the end of your billing period.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenDialog(false)}>No, Keep It</Button>
+          <Button onClick={handleCancelSubscription} color="error">
+            Yes, Cancel
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

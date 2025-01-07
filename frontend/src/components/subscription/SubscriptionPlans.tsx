@@ -4,151 +4,127 @@ import {
     Button,
     Card,
     CardContent,
-    CardHeader,
-    Chip,
     Grid,
-    List,
-    ListItem,
-    ListItemIcon,
-    ListItemText,
     Typography,
-    useTheme
+    Chip
 } from '@mui/material';
-import CheckIcon from '@mui/icons-material/Check';
-import { Plan } from '../../types';
+import { styled } from '@mui/material/styles';
 
-interface SubscriptionPlansProps {
+export interface SubscriptionPlansProps {
+    onSelectPlan: (plan: string) => void;
     currentPlan?: string;
-    onSelectPlan: (planId: string) => void;
+    selectedPlan: string | null;
+    disabled?: boolean;
 }
 
-const plans: Plan[] = [
+const StyledCard = styled(Card)<{ selected?: boolean }>(({ theme, selected }) => ({
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    transition: 'all 0.3s ease-in-out',
+    border: selected ? `2px solid ${theme.palette.primary.main}` : '1px solid rgba(0, 0, 0, 0.12)',
+    '&:hover': {
+        transform: 'translateY(-4px)',
+        boxShadow: theme.shadows[4]
+    }
+}));
+
+const plans = [
     {
         id: 'free',
         name: 'Free',
-        price: 0,
+        price: '$0',
+        description: 'Perfect for trying out our service',
         features: [
-            '1 Chatbot',
-            'Basic customization',
-            'Community support',
-            'Standard response time'
-        ],
-        recommended: false
+            '100 messages per month',
+            'Basic support',
+            'Basic analytics'
+        ]
     },
     {
         id: 'starter',
         name: 'Starter',
-        price: 29,
+        price: '$10',
+        description: 'Great for personal projects',
         features: [
-            '5 Chatbots',
-            'Advanced customization',
-            'Email support',
-            'Priority response time',
-            'Basic analytics',
-            'API access'
-        ],
-        recommended: true
+            '1,000 messages per month',
+            'Priority support',
+            'Advanced analytics',
+            'Custom branding'
+        ]
     },
     {
         id: 'professional',
         name: 'Professional',
-        price: 99,
+        price: '$29',
+        description: 'Perfect for businesses',
         features: [
-            'Unlimited Chatbots',
-            'Full customization',
-            'Priority support',
-            'Instant response time',
+            'Unlimited messages',
+            '24/7 priority support',
             'Advanced analytics',
-            'API access',
             'Custom branding',
+            'API access',
             'Team collaboration'
-        ],
-        recommended: false
+        ]
     }
 ];
 
 const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({
+    onSelectPlan,
     currentPlan = 'free',
-    onSelectPlan
+    selectedPlan,
+    disabled = false
 }) => {
-    const theme = useTheme();
-
     return (
-        <Grid container spacing={3} alignItems="flex-start">
+        <Grid container spacing={3}>
             {plans.map((plan) => (
-                <Grid item key={plan.id} xs={12} sm={6} md={4}>
-                    <Card
-                        sx={{
-                            height: '100%',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            position: 'relative',
-                            border: plan.recommended
-                                ? `2px solid ${theme.palette.primary.main}`
-                                : undefined
-                        }}
-                    >
-                        {plan.recommended && (
-                            <Chip
-                                label="Recommended"
-                                color="primary"
-                                sx={{
-                                    position: 'absolute',
-                                    top: -12,
-                                    right: 20,
-                                    zIndex: 1
-                                }}
-                            />
-                        )}
-                        <CardHeader
-                            title={plan.name}
-                            titleTypographyProps={{ align: 'center' }}
-                            subheaderTypographyProps={{ align: 'center' }}
-                            sx={{
-                                backgroundColor: theme.palette.grey[50]
-                            }}
-                        />
+                <Grid item xs={12} md={4} key={plan.id}>
+                    <StyledCard selected={selectedPlan === plan.id}>
                         <CardContent sx={{ flexGrow: 1 }}>
-                            <Box
-                                sx={{
-                                    display: 'flex',
-                                    justifyContent: 'center',
-                                    alignItems: 'baseline',
-                                    mb: 2
-                                }}
-                            >
-                                <Typography
-                                    component="h2"
-                                    variant="h3"
-                                    color="text.primary"
-                                >
-                                    ${plan.price}
+                            <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Typography variant="h5" component="div">
+                                    {plan.name}
                                 </Typography>
-                                <Typography variant="h6" color="text.secondary">
-                                    /mo
-                                </Typography>
+                                {currentPlan === plan.id && (
+                                    <Chip
+                                        label="Current Plan"
+                                        color="primary"
+                                        size="small"
+                                    />
+                                )}
                             </Box>
-                            <List>
+                            <Typography variant="h4" color="primary" gutterBottom>
+                                {plan.price}
+                                <Typography variant="caption" color="text.secondary">
+                                    /month
+                                </Typography>
+                            </Typography>
+                            <Typography color="text.secondary" paragraph>
+                                {plan.description}
+                            </Typography>
+                            <Box component="ul" sx={{ pl: 2 }}>
                                 {plan.features.map((feature) => (
-                                    <ListItem key={feature} sx={{ py: 1, px: 0 }}>
-                                        <ListItemIcon>
-                                            <CheckIcon color="primary" />
-                                        </ListItemIcon>
-                                        <ListItemText primary={feature} />
-                                    </ListItem>
+                                    <Typography
+                                        component="li"
+                                        key={feature}
+                                        sx={{ mb: 1 }}
+                                    >
+                                        {feature}
+                                    </Typography>
                                 ))}
-                            </List>
+                            </Box>
+                        </CardContent>
+                        <Box sx={{ p: 2, pt: 0 }}>
                             <Button
                                 fullWidth
-                                variant={currentPlan === plan.id ? "outlined" : "contained"}
+                                variant={selectedPlan === plan.id ? "contained" : "outlined"}
                                 onClick={() => onSelectPlan(plan.id)}
-                                sx={{ mt: 2 }}
-                                disabled={currentPlan === plan.id}
+                                disabled={disabled || currentPlan === plan.id}
                             >
-                                {currentPlan === plan.id ? 'CURRENT PLAN' : 'SELECT PLAN'}
+                                {currentPlan === plan.id ? 'Current Plan' : 'Select Plan'}
                             </Button>
-                        </CardContent>
-                    </Card>
+                        </Box>
+                    </StyledCard>
                 </Grid>
             ))}
         </Grid>
