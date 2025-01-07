@@ -68,7 +68,7 @@ const plans: Plan[] = [
 ];
 
 const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({
-    currentPlan,
+    currentPlan = 'free',
     onSelectPlan
 }) => {
     const theme = useTheme();
@@ -145,7 +145,7 @@ const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({
                                 sx={{ mt: 2 }}
                                 disabled={currentPlan === plan.id}
                             >
-                                {currentPlan === plan.id ? 'Current Plan' : 'Select Plan'}
+                                {currentPlan === plan.id ? 'CURRENT PLAN' : 'SELECT PLAN'}
                             </Button>
                         </CardContent>
                     </Card>
