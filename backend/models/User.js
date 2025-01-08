@@ -27,7 +27,7 @@ const userSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['user', 'admin'],
+        enum: ['user', 'admin', 'super_admin'],
         default: 'user'
     },
     subscription: {
@@ -71,19 +71,51 @@ const userSchema = new mongoose.Schema({
                 default: true
             }
         }
+    },
+    address: {
+        street: String,
+        city: String,
+        state: String,
+        country: String,
+        zipCode: String
+    },
+    status: {
+        type: String,
+        enum: ['active', 'suspended', 'deleted'],
+        default: 'active'
+    },
+    stripeCustomerId: {
+        type: String,
+        sparse: true
+    },
+    subscriptionDetails: {
+        id: String,
+        status: String,
+        currentPeriodEnd: Date,
+        cancelAtPeriodEnd: Boolean
     }
 }, {
     timestamps: true
+});
+
+// Convert email to lowercase before saving
+userSchema.pre('save', async function(next) {
+    if (this.isModified('email')) {
+        this.email = this.email.toLowerCase();
+    }
+    next();
 });
 
 // Encrypt password using bcrypt
 userSchema.pre('save', async function(next) {
     if (!this.isModified('password')) {
         next();
+        return;
     }
 
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
+    next();
 });
 
 // Sign JWT and return
@@ -95,7 +127,21 @@ userSchema.methods.getSignedJwtToken = function() {
 
 // Match user entered password to hashed password in database
 userSchema.methods.matchPassword = async function(enteredPassword) {
-    return await bcrypt.compare(enteredPassword, this.password);
+    try {
+        // Log password comparison details for debugging
+        console.log('Comparing passwords:', {
+            enteredLength: enteredPassword.length,
+            hashedLength: this.password.length
+        });
+        
+        // Use bcrypt.compare for password comparison
+        const isMatch = await bcrypt.compare(enteredPassword, this.password);
+        console.log('bcrypt comparison result:', isMatch);
+        return isMatch;
+    } catch (error) {
+        console.error('Password comparison error:', error);
+        return false;
+    }
 };
 
 // Generate API key

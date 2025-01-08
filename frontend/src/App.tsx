@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { ThemeProvider, CssBaseline } from '@mui/material';
 import { AuthProvider } from './context/AuthContext';
 import theme from './theme';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import SuperAdminRoutes from './routes/superAdminRoutes';
 
 // Pages
 import LoginPage from './pages/LoginPage';
@@ -25,47 +27,52 @@ import ChatbotsPage from './pages/ChatbotsPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 
+const queryClient = new QueryClient();
+
 function App() {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <AuthProvider>
-        <Router>
-          <Routes>
-            {/* Public routes */}
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/chat/:chatbotId" element={<StandaloneChatPage />} />
-            <Route path="/chat/:botId" element={<FullScreenChat />} />
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <AuthProvider>
+          <Router>
+            <SuperAdminRoutes />
+            <Routes>
+              {/* Public routes */}
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/chat/:chatbotId" element={<StandaloneChatPage />} />
+              <Route path="/chat/:botId" element={<FullScreenChat />} />
 
-            {/* Protected routes */}
-            <Route path="/app" element={<Layout />}>
-              <Route element={<ProtectedRoute />}>
-                <Route index element={<Navigate to="/app/dashboard" />} />
-                <Route path="dashboard">
-                  <Route index element={<DashboardPage />} />
-                  <Route path="profile" element={<ProfilePage />} />
-                </Route>
-                <Route path="settings" element={<SettingsPage />} />
-                <Route path="subscription" element={<SubscriptionPage />} />
-                <Route path="chatbots" element={<ChatbotsPage />} />
-                
-                {/* Chatbot specific routes - only accessible through dashboard */}
-                <Route path="chatbot">
-                  <Route path="new" element={<ChatbotSettingsPage />} />
-                  <Route path=":id/settings" element={<ChatbotSettingsPage />} />
-                  <Route path=":id/train" element={<ChatbotTrainingPage />} />
-                  <Route path=":id/training/documents/details" element={<TrainingDetailsPage />} />
-                  <Route path=":id/deploy" element={<ChatbotDeployPage />} />
-                  <Route path=":id/history" element={<ChatHistoryPage />} />
+              {/* Protected routes */}
+              <Route path="/app" element={<Layout />}>
+                <Route element={<ProtectedRoute />}>
+                  <Route index element={<Navigate to="/app/dashboard" />} />
+                  <Route path="dashboard">
+                    <Route index element={<DashboardPage />} />
+                    <Route path="profile" element={<ProfilePage />} />
+                  </Route>
+                  <Route path="settings" element={<SettingsPage />} />
+                  <Route path="subscription" element={<SubscriptionPage />} />
+                  <Route path="chatbots" element={<ChatbotsPage />} />
+                  
+                  {/* Chatbot specific routes - only accessible through dashboard */}
+                  <Route path="chatbot">
+                    <Route path="new" element={<ChatbotSettingsPage />} />
+                    <Route path=":id/settings" element={<ChatbotSettingsPage />} />
+                    <Route path=":id/train" element={<ChatbotTrainingPage />} />
+                    <Route path=":id/training/documents/details" element={<TrainingDetailsPage />} />
+                    <Route path=":id/deploy" element={<ChatbotDeployPage />} />
+                    <Route path=":id/history" element={<ChatHistoryPage />} />
+                  </Route>
                 </Route>
               </Route>
-            </Route>
-          </Routes>
-        </Router>
-      </AuthProvider>
-    </ThemeProvider>
+            </Routes>
+          </Router>
+        </AuthProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 }
 

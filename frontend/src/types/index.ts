@@ -2,7 +2,7 @@ export interface User {
     _id: string;
     name: string;
     email: string;
-    role: 'user' | 'admin';
+    role: 'user' | 'admin' | 'super_admin';
     subscription: 'free' | 'starter' | 'professional';
     usage: {
         messages: number;
@@ -11,6 +11,19 @@ export interface User {
     settings: {
         language: string;
         timezone: string;
+    };
+    status: 'active' | 'suspended' | 'deleted';
+    subscriptionDetails?: {
+        status: string;
+        currentPeriodEnd: Date;
+        cancelAtPeriodEnd: boolean;
+    };
+    address?: {
+        street?: string;
+        city?: string;
+        state?: string;
+        country?: string;
+        zipCode?: string;
     };
     createdAt: string;
 }
@@ -116,4 +129,25 @@ export interface SubscriptionPlan {
 export interface PasswordUpdateRequest {
     currentPassword: string;
     newPassword: string;
+}
+
+export interface AuditLogEntry {
+    _id: string;
+    action: 'user_create' | 'user_update' | 'user_delete' | 'subscription_update' | 'subscription_cancel' | 'user_suspend';
+    performedBy: {
+        _id: string;
+        name: string;
+        email: string;
+    };
+    targetUser: {
+        _id: string;
+        name: string;
+        email: string;
+    };
+    details: string;
+    previousState?: any;
+    newState?: any;
+    ip: string;
+    userAgent: string;
+    createdAt: string;
 }

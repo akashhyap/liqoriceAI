@@ -14,10 +14,12 @@ import analyticsRoutes from './routes/analytics.js';
 import trainingRoutes from './routes/training.js';
 import chatbotStatsRoutes from './routes/chatbot-stats.js';
 import subscriptionRoutes from './routes/subscription.js';
+import superAdminRoutes from './routes/superAdmin.js';
 import { Server } from 'socket.io';
 import { createServer } from 'http';
 import logger from './services/loggerService.js';
-import { notFound, errorHandler } from './middleware/errorHandler.js';
+import { errorHandler, validationErrorHandler, databaseErrorHandler } from './middleware/errorHandler.js';
+import { notFound } from './middleware/errorHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -29,30 +31,9 @@ const server = createServer(app);
 
 // Middleware
 // CORS configuration
-const allowedOrigins = [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:3001',
-    'https://liqoriceai-frontend.onrender.com',
-    'https://liqorice-frontend.onrender.com'
-];
-
 app.use(cors({
-    origin: function(origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl requests)
-        if (!origin) return callback(null, true);
-        
-        if (allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            console.warn('Origin not allowed by CORS:', origin);
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
+    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
+    credentials: true
 }));
 
 // Security middleware
@@ -77,13 +58,25 @@ app.get('/', (req, res) => {
 
 // API routes
 app.use('/api/chat', chatRoutes);
-app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/auth', authRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/training', trainingRoutes);
 app.use('/api/chatbot-stats', chatbotStatsRoutes);
 app.use('/api/subscription', subscriptionRoutes);
+app.use('/api/super-admin', superAdminRoutes);
+
+// Handle duplicate /api prefix routes
+app.use('/api/api/chat', chatRoutes);
+app.use('/api/api/users', userRoutes);
+app.use('/api/api/analytics', analyticsRoutes);
+app.use('/api/api/auth', authRoutes);
+app.use('/api/api/chatbot', chatbotRoutes);
+app.use('/api/api/training', trainingRoutes);
+app.use('/api/api/chatbot-stats', chatbotStatsRoutes);
+app.use('/api/api/subscription', subscriptionRoutes);
+app.use('/api/api/super-admin', superAdminRoutes);
 
 // Serve uploads directory
 app.use('/uploads', express.static(join(__dirname, 'uploads')));
@@ -138,14 +131,10 @@ io.on('connection', (socket) => {
 });
 
 // Error handling middleware
-import {
-    validationErrorHandler,
-    databaseErrorHandler,
-} from './middleware/errorHandler.js';
 app.use(validationErrorHandler);
 app.use(databaseErrorHandler);
-app.use(notFound);
 app.use(errorHandler);
+app.use(notFound);
 
 const PORT = process.env.PORT || 5001;
 server.listen(PORT, () => {

@@ -10,7 +10,8 @@ const useAuthStore = create<AuthState & {
     logout: () => void;
     loadUser: () => Promise<void>;
     updateUser: (userData: Partial<User> | PasswordUpdateRequest) => Promise<void>;
-}>((set) => ({
+    isSuperAdmin: () => boolean;
+}>((set, get) => ({
     user: null,
     token: localStorage.getItem('token'),
     isAuthenticated: false,
@@ -164,6 +165,11 @@ const useAuthStore = create<AuthState & {
             });
             throw new Error(errorMessage);
         }
+    },
+
+    isSuperAdmin: () => {
+        const state = get();
+        return state.user?.role === 'super_admin';
     },
 }));
 
