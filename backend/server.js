@@ -31,9 +31,26 @@ const server = createServer(app);
 
 // Middleware
 // CORS configuration
+const allowedOrigins = [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'https://liqoriceai-frontend.onrender.com'
+];
+
 app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
-    credentials: true
+    origin: function (origin, callback) {
+        // allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.indexOf(origin) === -1) {
+            const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+            return callback(new Error(msg), false);
+        }
+        return callback(null, true);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 // Security middleware
@@ -98,22 +115,8 @@ mongoose.connect(process.env.MONGODB_URI, {
 // WebSocket Setup
 const io = new Server(server, {
     cors: {
-        origin: function(origin, callback) {
-            if(!origin) return callback(null, true);
-            
-            const allowedOrigins = [
-                'http://localhost:3000',
-                'http://localhost:3001',
-                'http://127.0.0.1:3000',
-                'http://127.0.0.1:3001'
-            ];
-            
-            if (allowedOrigins.indexOf(origin) === -1) {
-                return callback(new Error('CORS policy violation'), false);
-            }
-            return callback(null, true);
-        },
-        methods: ['GET', 'POST'],
+        origin: allowedOrigins,
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         credentials: true
     }
 });
