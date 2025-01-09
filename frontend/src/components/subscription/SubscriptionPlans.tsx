@@ -6,9 +6,14 @@ import {
     CardContent,
     Grid,
     Typography,
-    Chip
+    Chip,
+    List,
+    ListItem,
+    ListItemIcon,
+    ListItemText
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
+import CheckIcon from '@mui/icons-material/Check';
 
 export interface SubscriptionPlansProps {
     onSelectPlan: (plan: string) => void;
@@ -36,6 +41,7 @@ const plans = [
         price: '$0',
         description: 'Perfect for trying out our service',
         features: [
+            '1 chatbot',
             '100 messages per month',
             'Basic support',
             'Basic analytics'
@@ -47,6 +53,7 @@ const plans = [
         price: '$10',
         description: 'Great for personal projects',
         features: [
+            '5 chatbots',
             '1,000 messages per month',
             'Priority support',
             'Advanced analytics',
@@ -59,6 +66,7 @@ const plans = [
         price: '$29',
         description: 'Perfect for businesses',
         features: [
+            'Unlimited chatbots',
             'Unlimited messages',
             '24/7 priority support',
             'Advanced analytics',
@@ -102,17 +110,21 @@ const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({
                             <Typography color="text.secondary" paragraph>
                                 {plan.description}
                             </Typography>
-                            <Box component="ul" sx={{ pl: 2 }}>
+                            <List disablePadding>
                                 {plan.features.map((feature) => (
-                                    <Typography
-                                        component="li"
-                                        key={feature}
-                                        sx={{ mb: 1 }}
-                                    >
-                                        {feature}
-                                    </Typography>
+                                    <ListItem key={feature} dense disableGutters>
+                                        <ListItemIcon sx={{ minWidth: 36 }}>
+                                            <CheckIcon color="primary" fontSize="small" />
+                                        </ListItemIcon>
+                                        <ListItemText 
+                                            primary={feature}
+                                            primaryTypographyProps={{
+                                                variant: 'body2'
+                                            }}
+                                        />
+                                    </ListItem>
                                 ))}
-                            </Box>
+                            </List>
                         </CardContent>
                         <Box sx={{ p: 2, pt: 0 }}>
                             <Button
