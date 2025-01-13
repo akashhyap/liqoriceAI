@@ -153,11 +153,11 @@ const ChatbotDeployPage: React.FC = () => {
                 textOverflow: 'ellipsis'
               }}
             >
-              {`${window.location.origin}/chat/${chatbot._id}`}
+              {`${window.location.origin}/standalone-chat/${chatbot._id}`}
             </Typography>
             <IconButton
               onClick={() => {
-                navigator.clipboard.writeText(`${window.location.origin}/chat/${chatbot._id}`);
+                navigator.clipboard.writeText(`${window.location.origin}/standalone-chat/${chatbot._id}`);
                 setLinkCopied(true);
               }}
               size="small"

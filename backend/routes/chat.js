@@ -37,27 +37,35 @@ router.options('*', chatCors);
 // Public endpoint for widget chat
 router.post('/:chatbotId', async (req, res) => {
     try {
-        const { message, sessionId, userId } = req.body;
+        const { message, sessionId } = req.body;
         const { chatbotId } = req.params;
 
         console.log('Received chat request:', {
             chatbotId,
             message,
             sessionId,
-            userId,
             body: req.body
         });
 
+        // First find chatbot without deployment status check
         const chatbot = await Chatbot.findOne({
-            _id: chatbotId,
-            'deployment.status': 'deployed'  // Check deployment status
+            _id: chatbotId.replace('$', '')  // Remove $ prefix if present
         });
 
         if (!chatbot) {
-            console.log('Chatbot not found or not deployed:', chatbotId);
+            console.log('Chatbot not found:', chatbotId);
             return res.status(404).json({
                 success: false,
-                error: 'Chatbot not found or not deployed'
+                error: 'Chatbot not found'
+            });
+        }
+
+        // Check deployment status separately for better error message
+        if (!chatbot.deployment || chatbot.deployment.status !== 'deployed') {
+            console.log('Chatbot not deployed:', chatbotId);
+            return res.status(400).json({
+                success: false,
+                error: 'This chatbot needs to be trained before it can be used. Please train the chatbot with some data first.'
             });
         }
 
@@ -69,42 +77,33 @@ router.post('/:chatbotId', async (req, res) => {
 
         const response = await chatService.generateResponse(chatbot, message);
         console.log('Generated response:', response);
-        
-        // Generate sessionId if not provided
-        const currentSessionId = sessionId || Math.random().toString(36).substring(7);
-        
-        // Save chat history with session and user info
+
+        // Save chat history
         const chatHistory = new ChatHistory({
-            chatbot: chatbotId,
+            chatbot: chatbotId.replace('$', ''),
             message,
             response: response.response,
-            sessionId: currentSessionId,
-            userId: userId || currentSessionId, // Use sessionId as userId if not provided
+            sessionId,
             timestamp: new Date(),
             metadata: {
-                sources: response.sources.map(source => JSON.stringify(source))
+                sources: response.sources ? response.sources.map(source => JSON.stringify(source)) : []
             }
         });
         await chatHistory.save();
-        console.log('Saved chat history with session:', currentSessionId);
+        console.log('Saved chat history with session:', sessionId);
 
         res.json({
             success: true,
             message: response.response,
-            sources: response.sources,
-            sessionId: currentSessionId // Return sessionId to client
+            sources: response.sources || [],
+            sessionId
         });
+
     } catch (error) {
-        console.error('Error in chat endpoint:', {
-            error: error.message,
-            stack: error.stack,
-            chatbotId: req.params.chatbotId,
-            body: req.body
-        });
-        
-        res.status(500).json({ 
+        console.error('Error in chat endpoint:', error);
+        res.status(500).json({
             success: false,
-            error: error.message || 'Error processing chat message'
+            error: error.message || 'An error occurred while processing your request'
         });
     }
 });

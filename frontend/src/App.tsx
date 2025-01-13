@@ -43,7 +43,6 @@ function App() {
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/chat/:chatbotId" element={<StandaloneChatPage />} />
-              <Route path="/chat/:botId" element={<FullScreenChat />} />
 
               {/* Protected routes */}
               <Route path="/app" element={<Layout />}>

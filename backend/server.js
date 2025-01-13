@@ -15,6 +15,8 @@ import trainingRoutes from './routes/training.js';
 import chatbotStatsRoutes from './routes/chatbot-stats.js';
 import subscriptionRoutes from './routes/subscription.js';
 import superAdminRoutes from './routes/superAdmin.js';
+import whatsappRoutes from './routes/whatsapp.js';
+import visitorRoutes from './routes/visitor.js';
 import { Server } from 'socket.io';
 import { createServer } from 'http';
 import logger from './services/loggerService.js';
@@ -83,17 +85,8 @@ app.use('/api/training', trainingRoutes);
 app.use('/api/chatbot-stats', chatbotStatsRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/super-admin', superAdminRoutes);
-
-// Handle duplicate /api prefix routes
-app.use('/api/api/chat', chatRoutes);
-app.use('/api/api/users', userRoutes);
-app.use('/api/api/analytics', analyticsRoutes);
-app.use('/api/api/auth', authRoutes);
-app.use('/api/api/chatbot', chatbotRoutes);
-app.use('/api/api/training', trainingRoutes);
-app.use('/api/api/chatbot-stats', chatbotStatsRoutes);
-app.use('/api/api/subscription', subscriptionRoutes);
-app.use('/api/api/super-admin', superAdminRoutes);
+app.use('/api/v1/whatsapp', whatsappRoutes);
+app.use('/api/v1/visitor', visitorRoutes);
 
 // Serve uploads directory
 app.use('/uploads', express.static(join(__dirname, 'uploads')));

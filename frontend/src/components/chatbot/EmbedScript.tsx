@@ -125,65 +125,13 @@ const EmbedScript: React.FC<EmbedScriptProps> = ({ chatbotId }) => {
     header.appendChild(buttonsContainer);
     chatWindow.appendChild(header);
 
-    // Create messages container
-    const messagesContainer = document.createElement('div');
-    messagesContainer.style.height = 'calc(100% - 130px)';
-    messagesContainer.style.overflowY = 'auto';
-    messagesContainer.style.padding = '20px';
-    chatWindow.appendChild(messagesContainer);
-
-    // Create input container
-    const inputContainer = document.createElement('div');
-    inputContainer.style.padding = '16px 20px';
-    inputContainer.style.borderTop = '1px solid #eee';
-    inputContainer.style.display = 'flex';
-    inputContainer.style.gap = '12px';
-    inputContainer.style.backgroundColor = 'white';
-    chatWindow.appendChild(inputContainer);
-
-    // Create input field
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.placeholder = 'Type your message...';
-    input.style.flex = '1';
-    input.style.padding = '10px 16px';
-    input.style.border = '1px solid #e5e7eb';
-    input.style.borderRadius = '20px';
-    input.style.outline = 'none';
-    input.style.fontSize = '14px';
-    input.style.transition = 'border-color 0.2s';
-    input.onfocus = () => {
-        input.style.borderColor = '#2563eb';
-    };
-    input.onblur = () => {
-        input.style.borderColor = '#e5e7eb';
-    };
-    inputContainer.appendChild(input);
-
-    // Create send button
-    const sendButton = document.createElement('button');
-    sendButton.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2.01 21L23 12L2.01 3L2 10L17 12L2 14L2.01 21Z" fill="white"/></svg>';
-    sendButton.style.width = '36px';
-    sendButton.style.height = '36px';
-    sendButton.style.borderRadius = '50%';
-    sendButton.style.backgroundColor = '#2563eb';
-    sendButton.style.border = 'none';
-    sendButton.style.color = 'white';
-    sendButton.style.cursor = 'pointer';
-    sendButton.style.display = 'flex';
-    sendButton.style.alignItems = 'center';
-    sendButton.style.justifyContent = 'center';
-    sendButton.style.transition = 'all 0.2s';
-    sendButton.style.flexShrink = '0';
-    sendButton.onmouseover = () => {
-        sendButton.style.transform = 'scale(1.05)';
-        sendButton.style.backgroundColor = '#1d4ed8';
-    };
-    sendButton.onmouseout = () => {
-        sendButton.style.transform = 'scale(1)';
-        sendButton.style.backgroundColor = '#2563eb';
-    };
-    inputContainer.appendChild(sendButton);
+    // Create iframe for chat
+    const iframe = document.createElement('iframe');
+    iframe.style.width = '100%';
+    iframe.style.height = 'calc(100% - 130px)';
+    iframe.style.border = 'none';
+    iframe.src = \`${window.location.protocol}//${window.location.host}/chat/${chatbotId}\`;
+    chatWindow.appendChild(iframe);
 
     // Toggle chat window
     let isEnlarged = false;
@@ -243,12 +191,15 @@ const EmbedScript: React.FC<EmbedScriptProps> = ({ chatbotId }) => {
         input.value = '';
 
         try {
-            const response = await fetch(\`${apiUrl}/chat/${chatbotId}\`, {
+            const response = await fetch(\`${apiUrl}/v1/visitor/chat\`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ message })
+                body: JSON.stringify({ 
+                    message,
+                    chatbotId: chatbotId.replace('$', '') // Remove $ prefix if present
+                })
             });
 
             if (!response.ok) {
@@ -300,10 +251,13 @@ const EmbedScript: React.FC<EmbedScriptProps> = ({ chatbotId }) => {
         }
     };
 
-    sendButton.onclick = sendMessage;
+    // Handle input events
     input.onkeypress = (e) => {
-        if (e.key === 'Enter') sendMessage();
+        if (e.key === 'Enter') {
+            sendMessage();
+        }
     };
+    sendButton.onclick = sendMessage;
 })();
 </script>`;
 

@@ -1,9 +1,6 @@
 import { ChatOpenAI } from '@langchain/openai';
-import { PineconeStore } from '@langchain/pinecone';
-import { OpenAIEmbeddings } from '@langchain/openai';
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { Pinecone } from '@pinecone-database/pinecone';
-import { PromptTemplate } from '@langchain/core/prompts';
-import { StringOutputParser } from "@langchain/core/output_parsers";
 import Chatbot from '../models/Chatbot.js';
 import documentService from './documentService.js';
 import websiteTrainingService from './websiteTrainingService.js';
@@ -37,133 +34,40 @@ class ChatService {
         return model;
     }
 
-    async generateResponse(chatbot, message) {
+    async generateResponse(chatbot, message, sessionId = null) {
         try {
-            console.log('Starting generateResponse for chatbot:', chatbot._id);
-            
-            // Check training status from both documents and websites
-            const trainingStatus = await documentService.getNamespaceStats(chatbot._id);
-            console.log('Training status:', trainingStatus);
-            
-            if (!trainingStatus?.vectorCount) {
-                return {
-                    response: "I haven't been trained with any data yet. Please add some training data first.",
-                    sources: []
-                };
-            }
-
             const model = await this.getModel(chatbot.settings);
-            console.log('Model initialized');
             
-            const embeddings = new OpenAIEmbeddings({
-                openAIApiKey: process.env.OPENAI_API_KEY
-            });
-            console.log('Embeddings initialized');
-
-            // Initialize vector store with correct index format
-            const pineconeIndex = this.pinecone.index(process.env.PINECONE_INDEX);
-            
-            // Query directly using Pinecone
-            const queryEmbedding = await embeddings.embedQuery(message);
-            const queryFilter = {
-                chatbotId: chatbot._id.toString()
-            };
-            
-            console.log('Querying Pinecone:', {
-                chatbotId: chatbot._id.toString(),
-                filter: queryFilter,
-                topK: Math.min(3, trainingStatus.vectorCount)
-            });
-            
-            const queryResponse = await pineconeIndex.query({
-                vector: queryEmbedding,
-                topK: Math.min(3, trainingStatus.vectorCount),
-                includeMetadata: true,
-                filter: queryFilter
-            });
-
-            console.log('Pinecone query response:', {
-                matchCount: queryResponse.matches?.length,
-                matches: queryResponse.matches?.map(match => ({
-                    score: match.score,
-                    metadata: match.metadata
-                }))
-            });
-
-            if (!queryResponse.matches.length) {
-                return {
-                    response: "I couldn't find any relevant information in my training data to answer your question. Could you try rephrasing it?",
-                    sources: []
-                };
+            // Get context from session if needed
+            let context = '';
+            if (sessionId) {
+                const session = await VisitorSession.findById(sessionId).populate('chatHistory');
+                if (session && session.chatHistory) {
+                    // Get last few messages for context
+                    context = session.chatHistory.messages
+                        .slice(-3) // Get last 3 messages
+                        .map(msg => `${msg.role}: ${msg.content}`)
+                        .join('\n');
+                }
             }
 
-            // Format the context from matched documents
-            const context = queryResponse.matches
-                .map(match => match.metadata.text)
-                .join('\n\n');
+            // Prepare messages
+            const messages = [
+                new SystemMessage(chatbot.settings?.customPrompt?.systemMessage || 
+                    "You are a helpful AI assistant that answers questions based on the provided context."),
+                new HumanMessage(message)
+            ];
 
-            const sourceTypes = [...new Set(queryResponse.matches.map(match => match.metadata.sourceType))].join(' and ');
-
-            // Create prompt template
-            const promptTemplate = PromptTemplate.fromTemplate(`
-                {system_message}
-                
-                Context information from {source_types}:
-                {context}
-                
-                User: {question}
-                
-                Assistant: I'll help you with your question. Let me analyze the context and provide a clear, accurate response.
-            `);
-
-            // Format the prompt with actual values
-            const formattedPrompt = await promptTemplate.format({
-                system_message: chatbot.settings?.customPrompt?.systemMessage || 
-                    'You are a helpful AI assistant that answers questions based on the provided context.',
-                source_types: sourceTypes,
-                context: context,
-                question: message
-            });
-
-            // Create the chain
-            const chain = promptTemplate
-                .pipe(model)
-                .pipe(new StringOutputParser());
+            if (context) {
+                messages.splice(1, 0, new SystemMessage(`Previous conversation:\n${context}`));
+            }
 
             // Generate response
-            const response = await chain.invoke({
-                system_message: chatbot.settings?.customPrompt?.systemMessage || 
-                    'You are a helpful AI assistant that answers questions based on the provided context.',
-                source_types: sourceTypes,
-                context: context,
-                question: message
-            });
-            
-            console.log('Generated response');
-
-            // Update analytics
-            chatbot.analytics.totalMessages += 1;
-            chatbot.analytics.lastMessageAt = new Date();
-            await chatbot.save();
-
-            return {
-                response,
-                sources: queryResponse.matches.map(match => ({
-                    content: match.metadata.text,
-                    metadata: {
-                        ...match.metadata,
-                        preview: match.metadata.text.substring(0, 200)
-                    }
-                }))
-            };
+            const response = await model.call(messages);
+            return response.content;
         } catch (error) {
-            console.error('Error in generateResponse:', {
-                error: error.message,
-                stack: error.stack,
-                chatbotId: chatbot._id,
-                settings: chatbot.settings
-            });
-            throw error;
+            console.error('Error generating response:', error);
+            throw new Error('Failed to generate response');
         }
     }
 

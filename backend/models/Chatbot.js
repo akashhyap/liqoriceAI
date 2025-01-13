@@ -1,4 +1,10 @@
 import mongoose from 'mongoose';
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import openai from '../utils/openai.js';
+import VisitorSession from './VisitorSession.js';
+import { Pinecone } from '@pinecone-database/pinecone';
+import { OpenAIEmbeddings } from '@langchain/openai';
+import { PineconeStore } from '@langchain/pinecone';
 
 const chatbotSchema = new mongoose.Schema({
     name: {
@@ -146,6 +152,98 @@ chatbotSchema.pre('save', function(next) {
 
     next();
 });
+
+// Method to generate response
+chatbotSchema.methods.generateResponse = async function(message, sessionId) {
+    try {
+        const { model, temperature, maxTokens, customPrompt } = this.settings;
+        
+        // Get OpenAI model
+        const chatModel = openai.getModel({
+            model,
+            temperature,
+            maxTokens
+        });
+
+        // Initialize Pinecone and get the vector store
+        let relevantContext = '';
+        try {
+            const pinecone = new Pinecone({
+                apiKey: process.env.PINECONE_API_KEY
+            });
+            
+            const pineconeIndex = pinecone.index(process.env.PINECONE_INDEX);
+            
+            const embeddings = new OpenAIEmbeddings({
+                openAIApiKey: process.env.OPENAI_API_KEY
+            });
+
+            const vectorStore = await PineconeStore.fromExistingIndex(
+                embeddings,
+                { 
+                    pineconeIndex,
+                    filter: { chatbotId: this._id.toString() }
+                }
+            );
+
+            // Get relevant documents from vector store
+            const vectorResults = await vectorStore.similaritySearch(message, 3);
+            
+            // Extract and format context from vector results
+            if (vectorResults && vectorResults.length > 0) {
+                relevantContext = vectorResults
+                    .map(doc => doc.pageContent)
+                    .join('\n\n');
+            }
+        } catch (vectorError) {
+            console.error('Error getting vector store context:', vectorError);
+            // Continue without vector store context
+        }
+
+        // Get conversation context from session if needed
+        let conversationContext = '';
+        if (sessionId) {
+            const session = await VisitorSession.findById(sessionId).populate('chatHistory');
+            if (session && session.chatHistory && session.chatHistory.messages) {
+                // Get last few messages for context
+                conversationContext = session.chatHistory.messages
+                    .slice(-3) // Get last 3 messages
+                    .map(msg => `${msg.role}: ${msg.content}`)
+                    .join('\n');
+            }
+        }
+
+        // Prepare messages
+        const messages = [
+            new SystemMessage(customPrompt?.systemMessage || 
+                "You are a helpful AI assistant that answers questions based on the provided context."),
+        ];
+
+        // Add trained data context if available
+        if (relevantContext) {
+            messages.push(new SystemMessage(
+                `Use this relevant information to answer the question:\n${relevantContext}`
+            ));
+        }
+
+        // Add conversation context if available
+        if (conversationContext) {
+            messages.push(new SystemMessage(
+                `Previous conversation:\n${conversationContext}`
+            ));
+        }
+
+        // Add user's question
+        messages.push(new HumanMessage(message));
+
+        // Generate response
+        const response = await chatModel.call(messages);
+        return response.content;
+    } catch (error) {
+        console.error('Error generating response:', error);
+        throw new Error(error.message || 'Failed to generate response');
+    }
+};
 
 const Chatbot = mongoose.model('Chatbot', chatbotSchema);
 export default Chatbot;

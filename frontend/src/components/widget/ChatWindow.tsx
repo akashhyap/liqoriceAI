@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Box, Paper, Typography, TextField, IconButton, CircularProgress } from '@mui/material';
+import { Box, Paper, Typography, TextField, IconButton, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
 import { Send as SendIcon, Close as CloseIcon, Minimize as MinimizeIcon, OpenInFull as EnlargeIcon, CloseFullscreen as ShrinkIcon } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
+import { useFormik } from 'formik';
+import * as Yup from 'yup';
 
 interface Message {
     id: string;
@@ -87,11 +89,17 @@ const InputContainer = styled(Box)(({ theme }) => ({
     backgroundColor: 'var(--fb-bg-color)',
 }));
 
+const validationSchema = Yup.object({
+    email: Yup.string()
+        .email('Enter a valid email')
+        .required('Email is required'),
+});
+
 const generateId = () => {
     return window.crypto.randomUUID();
 };
 
-const ChatWindow: React.FC<ChatWindowProps> = ({
+const ChatWindow = ({
     botId,
     apiEndpoint,
     onClose,
@@ -100,20 +108,77 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     isEnlarged = false,
     onToggleEnlarge,
     theme = defaultTheme,
-}) => {
+}: ChatWindowProps) => {
     const [messages, setMessages] = useState<Message[]>([]);
+    const [inputMessage, setInputMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [input, setInput] = useState('');
+    const [showEmailModal, setShowEmailModal] = useState(true);
+    const [email, setEmail] = useState<string | null>(null);
+    const [sessionId, setSessionId] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
+    const formik = useFormik({
+        initialValues: {
+            email: '',
+        },
+        validationSchema: validationSchema,
+        onSubmit: async (values) => {
+            try {
+                const response = await fetch(`${apiEndpoint}/api/v1/visitor/session`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: values.email,
+                        chatbotId: botId
+                    }),
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    setEmail(values.email);
+                    setSessionId(data.data.sessionId);
+                    localStorage.setItem('visitorEmail', values.email);
+                    setShowEmailModal(false);
+                }
+            } catch (error) {
+                console.error('Error initializing session:', error);
+            }
+        },
+    });
+
     useEffect(() => {
-        // Apply theme variables
-        document.documentElement.style.setProperty('--fb-primary-color', theme.primaryColor);
-        document.documentElement.style.setProperty('--fb-header-color', theme.headerColor);
-        document.documentElement.style.setProperty('--fb-bg-color', theme.backgroundColor);
-        document.documentElement.style.setProperty('--fb-border-radius', theme.borderRadius);
-    }, [theme]);
+        const savedEmail = localStorage.getItem('visitorEmail');
+        if (savedEmail) {
+            setEmail(savedEmail);
+            setShowEmailModal(false);
+            // Initialize session with saved email
+            initializeSession(savedEmail);
+        }
+    }, []);
+
+    const initializeSession = async (userEmail: string) => {
+        try {
+            const response = await fetch(`${apiEndpoint}/api/v1/visitor/session`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email: userEmail,
+                    chatbotId: botId
+                }),
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                setSessionId(data.data.sessionId);
+            }
+        } catch (error) {
+            console.error('Error initializing session:', error);
+        }
+    };
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -123,78 +188,71 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         scrollToBottom();
     }, [messages]);
 
-    const handleSendMessage = async (content: string) => {
-        if (!content.trim()) return;
+    const handleSendMessage = async () => {
+        if (!inputMessage.trim() || !sessionId) return;
 
-        setIsLoading(true);
-        setError(null);
-
-        // Add user message
-        const userMessage: Message = {
+        const newMessage: Message = {
             id: generateId(),
             role: 'user',
-            content,
-            timestamp: new Date().toISOString(),
+            content: inputMessage,
+            timestamp: new Date().toISOString()
         };
-        setMessages(prev => [...prev, userMessage]);
+
+        setMessages(prev => [...prev, newMessage]);
+        setInputMessage('');
+        setIsLoading(true);
 
         try {
-            // Create EventSource for streaming
-            const eventSource = new EventSource(
-                `${apiEndpoint}/chat/stream?botId=${botId}&question=${encodeURIComponent(
-                    content
-                )}`
-            );
+            // Save message to visitor chat history
+            await fetch(`${apiEndpoint}/api/v1/visitor/message`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    sessionId,
+                    role: 'user',
+                    content: newMessage.content
+                }),
+            });
 
-            let assistantMessage = '';
+            // Original chat processing
+            const response = await fetch(`${apiEndpoint}/api/chat/${botId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message: inputMessage }),
+            });
 
-            eventSource.onmessage = (event) => {
-                const data = JSON.parse(event.data);
+            const data = await response.json();
+            
+            if (data.success) {
+                const botMessage: Message = {
+                    id: generateId(),
+                    role: 'assistant',
+                    content: data.message,
+                    timestamp: new Date().toISOString(),
+                    sources: data.sources
+                };
 
-                if (data.error) {
-                    setError(data.error);
-                    eventSource.close();
-                    return;
-                }
+                setMessages(prev => [...prev, botMessage]);
 
-                if (data.done) {
-                    // Final message with sources
-                    setMessages(prev => [
-                        ...prev.slice(0, -1),
-                        {
-                            id: generateId(),
-                            role: 'assistant',
-                            content: assistantMessage,
-                            timestamp: new Date().toISOString(),
-                            sources: data.sources,
-                        },
-                    ]);
-                    eventSource.close();
-                    return;
-                }
-
-                // Accumulate tokens
-                assistantMessage += data.token;
-                
-                // Update the message in real-time
-                setMessages(prev => [
-                    ...prev.slice(0, -1),
-                    {
-                        id: generateId(),
-                        role: 'assistant',
-                        content: assistantMessage,
-                        timestamp: new Date().toISOString(),
+                // Save bot response to visitor chat history
+                await fetch(`${apiEndpoint}/api/v1/visitor/message`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
                     },
-                ]);
-            };
-
-            eventSource.onerror = (error) => {
-                console.error('EventSource error:', error);
-                setError('Connection error. Please try again.');
-                eventSource.close();
-            };
-        } catch (err: any) {
-            setError(err.message || 'An error occurred. Please try again.');
+                    body: JSON.stringify({
+                        sessionId,
+                        role: 'assistant',
+                        content: botMessage.content
+                    }),
+                });
+            }
+        } catch (error) {
+            console.error('Error processing message:', error);
         } finally {
             setIsLoading(false);
         }
@@ -203,93 +261,138 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     const handleKeyPress = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            handleSendMessage(input);
-            setInput('');
+            handleSendMessage();
         }
     };
 
-    return (
-        <StyledPaper isFullScreen={isFullScreen}>
-            <Header>
-                <Typography variant="h6">Chat Support</Typography>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                    <IconButton
-                        size="small"
-                        onClick={onToggleEnlarge}
-                        sx={{ color: '#fff' }}
-                    >
-                        {isEnlarged ? <ShrinkIcon /> : <EnlargeIcon />}
-                    </IconButton>
-                    <IconButton
-                        size="small"
-                        onClick={onClose}
-                        sx={{ color: '#fff' }}
-                    >
-                        <CloseIcon />
-                    </IconButton>
-                </Box>
-            </Header>
-            
-            <MessageContainer isFullScreen={isFullScreen}>
-                {messages.map((message) => (
-                    <MessageBubble key={message.id} isUser={message.role === 'user'}>
-                        <Typography>{message.content}</Typography>
-                        {message.sources && (
-                            <Typography variant="body2" color="textSecondary">
-                                Sources: {message.sources}
-                            </Typography>
-                        )}
-                    </MessageBubble>
-                ))}
-                <div ref={messagesEndRef} />
-            </MessageContainer>
+    useEffect(() => {
+        // Apply theme variables
+        document.documentElement.style.setProperty('--fb-primary-color', theme.primaryColor);
+        document.documentElement.style.setProperty('--fb-header-color', theme.headerColor);
+        document.documentElement.style.setProperty('--fb-bg-color', theme.backgroundColor);
+        document.documentElement.style.setProperty('--fb-border-radius', theme.borderRadius);
+    }, [theme]);
 
-            <InputContainer>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                    <TextField
-                        fullWidth
-                        variant="outlined"
-                        placeholder="Type your message..."
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyPress={handleKeyPress}
-                        disabled={isLoading}
-                        size="small"
-                        multiline
-                        maxRows={4}
-                        sx={{
-                            '& .MuiOutlinedInput-root': {
-                                borderRadius: '20px',
-                            },
-                        }}
-                    />
-                    <IconButton
-                        color="primary"
-                        onClick={() => handleSendMessage(input)}
-                        disabled={isLoading || !input.trim()}
-                        sx={{
-                            backgroundColor: 'var(--fb-primary-color)',
-                            color: 'white',
-                            '&:hover': {
-                                backgroundColor: 'var(--fb-primary-color)',
-                                opacity: 0.9,
-                            },
-                            '&.Mui-disabled': {
-                                backgroundColor: '#e0e0e0',
-                                color: '#9e9e9e',
-                            },
-                        }}
-                    >
-                        {isLoading ? <CircularProgress size={24} color="inherit" /> : <SendIcon />}
-                    </IconButton>
-                </Box>
-                {error && (
-                    <Typography variant="body2" color="error">
-                        {error}
+    return (
+        <>
+            <Dialog open={showEmailModal} onClose={() => {
+                if (email) setShowEmailModal(false);
+            }}>
+                <DialogTitle>
+                    <Typography variant="h6" component="div" align="center">
+                        Welcome to Chat
                     </Typography>
-                )}
-            </InputContainer>
-        </StyledPaper>
+                </DialogTitle>
+                <form onSubmit={formik.handleSubmit}>
+                    <DialogContent>
+                        <Box sx={{ my: 2 }}>
+                            <Typography variant="body1" sx={{ mb: 2 }}>
+                                Please enter your email to continue. This will help us save your chat history.
+                            </Typography>
+                            <TextField
+                                fullWidth
+                                id="email"
+                                name="email"
+                                label="Email Address"
+                                variant="outlined"
+                                value={formik.values.email}
+                                onChange={formik.handleChange}
+                                error={formik.touched.email && Boolean(formik.errors.email)}
+                                helperText={formik.touched.email && formik.errors.email}
+                                autoFocus
+                            />
+                        </Box>
+                    </DialogContent>
+                    <DialogActions sx={{ px: 3, pb: 3 }}>
+                        <Button
+                            type="submit"
+                            variant="contained"
+                            color="primary"
+                            disabled={!formik.isValid || formik.isSubmitting}
+                        >
+                            Start Chat
+                        </Button>
+                    </DialogActions>
+                </form>
+            </Dialog>
+
+            <StyledPaper isFullScreen={isFullScreen}>
+                <Header>
+                    <Typography variant="h6">Chat Support</Typography>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                        <IconButton
+                            size="small"
+                            onClick={onToggleEnlarge}
+                            sx={{ color: '#fff' }}
+                        >
+                            {isEnlarged ? <ShrinkIcon /> : <EnlargeIcon />}
+                        </IconButton>
+                        <IconButton
+                            size="small"
+                            onClick={onClose}
+                            sx={{ color: '#fff' }}
+                        >
+                            <CloseIcon />
+                        </IconButton>
+                    </Box>
+                </Header>
+                
+                <MessageContainer isFullScreen={isFullScreen}>
+                    {messages.map((message) => (
+                        <MessageBubble key={message.id} isUser={message.role === 'user'}>
+                            <Typography>{message.content}</Typography>
+                            {message.sources && (
+                                <Typography variant="body2" color="textSecondary">
+                                    Sources: {message.sources}
+                                </Typography>
+                            )}
+                        </MessageBubble>
+                    ))}
+                    <div ref={messagesEndRef} />
+                </MessageContainer>
+
+                <InputContainer>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                        <TextField
+                            fullWidth
+                            variant="outlined"
+                            placeholder="Type your message..."
+                            value={inputMessage}
+                            onChange={(e) => setInputMessage(e.target.value)}
+                            onKeyPress={handleKeyPress}
+                            disabled={isLoading}
+                            size="small"
+                            multiline
+                            maxRows={4}
+                            sx={{
+                                '& .MuiOutlinedInput-root': {
+                                    borderRadius: '20px',
+                                },
+                            }}
+                        />
+                        <IconButton
+                            color="primary"
+                            onClick={handleSendMessage}
+                            disabled={isLoading || !inputMessage.trim()}
+                            sx={{
+                                backgroundColor: 'var(--fb-primary-color)',
+                                color: 'white',
+                                '&:hover': {
+                                    backgroundColor: 'var(--fb-primary-color)',
+                                    opacity: 0.9,
+                                },
+                                '&.Mui-disabled': {
+                                    backgroundColor: '#e0e0e0',
+                                    color: '#9e9e9e',
+                                },
+                            }}
+                        >
+                            {isLoading ? <CircularProgress size={24} color="inherit" /> : <SendIcon />}
+                        </IconButton>
+                    </Box>
+                </InputContainer>
+            </StyledPaper>
+        </>
     );
 };
 

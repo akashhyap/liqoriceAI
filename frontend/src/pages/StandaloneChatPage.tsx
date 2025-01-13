@@ -1,289 +1,642 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { 
-  Box, 
-  TextField, 
-  Button, 
-  Typography,
+import {
+  Box,
+  TextField,
   IconButton,
+  CircularProgress,
   useTheme,
   useMediaQuery,
-  Drawer,
-  List,
-  ListItem,
-  ListItemText,
-  Divider,
+  Avatar,
+  Typography,
+  Button
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
-import MenuIcon from '@mui/icons-material/Menu';
-import CloseIcon from '@mui/icons-material/Close';
-import PersonIcon from '@mui/icons-material/Person';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
+import PersonIcon from '@mui/icons-material/Person';
+import MenuIcon from '@mui/icons-material/Menu';
+import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
+import ChatHistorySidebar from '../components/visitor/ChatHistorySidebar';
+import EmailModal from '../components/visitor/EmailModal';
+
+// Use the types from ChatHistorySidebar
+import type { ChatSession as IChatSession, ChatMessage as IChatMessage } from '../components/visitor/ChatHistorySidebar';
 
 const StandaloneChatPage: React.FC = () => {
   const { chatbotId } = useParams<{ chatbotId: string }>();
   const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState<Array<{ text: string; isUser: boolean }>>([]);
+  const [messages, setMessages] = useState<IChatMessage[]>([]);
+  const [sessions, setSessions] = useState<IChatSession[]>([]);
+  const [currentSession, setCurrentSession] = useState<IChatSession | null>(null);
+  const [email, setEmail] = useState('');
+  const [showEmailModal, setShowEmailModal] = useState(true);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isFirstVisit, setIsFirstVisit] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  
-  const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  // Get API URL from environment or window location
+  const getApiUrl = () => {
+    // For production deployment
+    if (window.location.hostname === 'liqoriceai-frontend.onrender.com') {
+      return 'https://liqoriceai-backend.onrender.com/api';
+    }
+    
+    // For local development
+    if (process.env.REACT_APP_API_URL) {
+      return process.env.REACT_APP_API_URL.replace(/\/+$/, '');
+    }
+    
+    // Fallback for local development
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    const port = hostname === 'localhost' ? ':5000' : '';
+    return `${protocol}//${hostname}${port}/api`;
   };
 
+  const apiUrl = getApiUrl();
+
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    console.log('Current API URL:', apiUrl); // Debug log
+  }, [apiUrl]);
 
-  const sendMessage = async () => {
-    if (!message.trim()) return;
-
-    // Add user message
-    setMessages(prev => [...prev, { text: message, isUser: true }]);
-    const userMessage = message;
-    setMessage('');
-
+  // Add error boundary for fetch calls
+  const fetchWithErrorHandling = async (url: string, options: RequestInit = {}) => {
     try {
-      const response = await fetch(`${apiUrl}/chat/${chatbotId?.replace('$', '')}`, {
-        method: 'POST',
+      console.log('Fetching URL:', url); // Debug log
+      const response = await fetch(url, {
+        ...options,
         headers: {
           'Content-Type': 'application/json',
+          ...options.headers,
         },
-        body: JSON.stringify({ message: userMessage })
+        credentials: 'include', // Add this to handle cookies if needed
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error('API Error Response:', errorText); // Debug log
+        try {
+          // Try to parse as JSON
+          const errorJson = JSON.parse(errorText);
+          throw new Error(errorJson.error || `HTTP error! status: ${response.status}`);
+        } catch (e) {
+          // If not JSON, use text
+          throw new Error(`HTTP error! status: ${response.status}. ${errorText}`);
+        }
       }
 
       const data = await response.json();
-      setMessages(prev => [...prev, { text: data.message, isUser: false }]);
+      console.log('API Response:', data); // Debug log
+      return data;
     } catch (error) {
-      console.error('Error sending message:', error);
-      setMessages(prev => [{ 
-        text: 'Sorry, I encountered an error. Please try again later.', 
-        isUser: false 
-      }]);
+      console.error('API Error:', error);
+      throw error;
+    }
+  };
+
+  useEffect(() => {
+    // Check if chatbotId is available
+    if (!chatbotId) {
+      setError('Invalid chatbot ID');
+      return;
+    }
+
+    // Check for saved email
+    const savedEmail = localStorage.getItem('visitorEmail');
+    if (savedEmail) {
+      setEmail(savedEmail);
+      setShowEmailModal(false);
+      setIsFirstVisit(false);
+      handleEmailSubmit(savedEmail); // Initialize session with saved email
+    }
+  }, [chatbotId]);
+
+  const handleEmailSubmit = async (submittedEmail: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetchWithErrorHandling(`${apiUrl}/v1/visitor/session`, {
+        method: 'POST',
+        body: JSON.stringify({
+          email: submittedEmail,
+          chatbotId: chatbotId?.replace('$', '') // Remove $ prefix if present
+        })
+      });
+
+      if (response.success) {
+        setEmail(submittedEmail);
+        localStorage.setItem('visitorEmail', submittedEmail);
+        setCurrentSession({
+          _id: response.data.sessionId,
+          sessionId: response.data.sessionId,
+          startTime: new Date().toISOString(),
+          endTime: undefined,
+          isActive: true,
+          messages: []
+        });
+        setSessions(prev => [{
+          _id: response.data.sessionId,
+          sessionId: response.data.sessionId,
+          startTime: new Date().toISOString(),
+          endTime: undefined,
+          isActive: true,
+          messages: []
+        }, ...prev]);
+        setShowEmailModal(false);
+        setIsAuthenticated(true);
+
+        // Load chat history for returning users
+        const historyResponse = await fetchWithErrorHandling(`${apiUrl}/v1/visitor/history?email=${submittedEmail}`);
+        if (historyResponse.success && historyResponse.data.length > 0) {
+          setSessions(historyResponse.data);
+          const activeSession = historyResponse.data.find((s: IChatSession) => s.isActive) || historyResponse.data[0];
+          setCurrentSession(activeSession);
+          setMessages(activeSession.messages);
+        }
+      }
+    } catch (error) {
+      console.error('Error initializing session:', error);
+      setError(error instanceof Error ? error.message : 'Failed to initialize chat session');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadChatHistory = async () => {
+    try {
+      if (!email) return;
+      
+      const data = await fetchWithErrorHandling(
+        `${apiUrl}/v1/visitor/history?email=${encodeURIComponent(email)}`
+      );
+      
+      if (data.success) {
+        // Transform sessions to match our interface and filter out empty sessions
+        const transformedSessions = data.data
+          .map((session: any) => {
+            // Ensure messages array exists and has proper format
+            const messages = session.messages || [];
+            
+            return {
+              _id: session.sessionId,
+              sessionId: session.sessionId,
+              startTime: session.startTime,
+              endTime: session.endTime || session.startTime,
+              isActive: session.isActive,
+              messages: messages.map((msg: any) => ({
+                role: msg.role as 'user' | 'assistant',
+                content: msg.content,
+                timestamp: msg.timestamp || session.startTime
+              }))
+            };
+          })
+          .filter((session: IChatSession) => session.messages.length > 0); // Filter out empty sessions
+        
+        console.log('Transformed sessions:', transformedSessions); // Debug log
+        
+        setSessions(transformedSessions);
+        
+        // Set current session to the most recent active session or create new one
+        const activeSession = transformedSessions.find((s: IChatSession) => s.isActive) || transformedSessions[0];
+        if (activeSession) {
+          setCurrentSession(activeSession);
+          setMessages(activeSession.messages);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading chat history:', error);
+      setError(error instanceof Error ? error.message : 'Failed to load chat history');
+    }
+  };
+
+  const initializeSession = async () => {
+    try {
+      if (!email || !chatbotId) return;
+
+      const response = await fetchWithErrorHandling(`${apiUrl}/v1/visitor/session`, {
+        method: 'POST',
+        body: JSON.stringify({
+          email,
+          chatbotId
+        })
+      });
+
+      if (response.success) {
+        setIsAuthenticated(true);
+        // Load chat history after initializing session
+        await loadChatHistory();
+      }
+    } catch (error) {
+      console.error('Error initializing session:', error);
+      setError('Failed to initialize chat session');
+    }
+  };
+
+  const sendMessage = async (message: string) => {
+    if (!chatbotId || !currentSession || !message.trim()) return;
+
+    try {
+      const timestamp = new Date().toISOString();
+      const userMessage: IChatMessage = { 
+        role: 'user', 
+        content: message.trim(),
+        timestamp
+      };
+      
+      setMessages(prev => [...prev, userMessage]);
+      setMessage('');
+
+      const data = await fetchWithErrorHandling(
+        `${apiUrl}/v1/visitor/chat/${chatbotId}`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            message: message.trim(),
+            sessionId: currentSession._id
+          })
+        }
+      );
+
+      if (data.success) {
+        const botMessage: IChatMessage = { 
+          role: 'assistant', 
+          content: data.message,
+          timestamp: new Date().toISOString()
+        };
+        
+        setMessages(prev => [...prev, botMessage]);
+        
+        // Update session messages
+        setSessions(prev => prev.map(session => 
+          session._id === currentSession._id 
+            ? { 
+                ...session, 
+                messages: [...session.messages, userMessage, botMessage]
+              }
+            : session
+        ));
+      }
+    } catch (error) {
+      console.error('Error in sendMessage:', error);
+      setError(error instanceof Error ? error.message : 'Failed to send message');
+    }
+  };
+
+  const handleSessionSelect = (selectedSessionId: string) => {
+    try {
+      setLoading(true);
+      const selectedSession = sessions.find(session => session.sessionId === selectedSessionId);
+      if (selectedSession) {
+        // Update sessions to reflect the new active state
+        setSessions(prev => prev.map(session => ({
+          ...session,
+          isActive: session.sessionId === selectedSessionId
+        })));
+
+        // Update current session and messages
+        setCurrentSession(selectedSession);
+        setMessages(selectedSession.messages);
+        
+        // Close mobile drawer if needed
+        if (isMobile) {
+          setIsDrawerOpen(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error switching session:', error);
+      setError('Failed to switch chat session');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleNewChat = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Create new session
+      const response = await fetchWithErrorHandling(`${apiUrl}/v1/visitor/session`, {
+        method: 'POST',
+        body: JSON.stringify({
+          email,
+          chatbotId: chatbotId?.replace('$', '')
+        })
+      });
+
+      if (response.success) {
+        const newSession: IChatSession = {
+          _id: response.data.sessionId,
+          sessionId: response.data.sessionId,
+          startTime: new Date().toISOString(),
+          endTime: undefined,
+          isActive: true,
+          messages: []
+        };
+
+        // Update sessions list
+        setSessions(prev => [newSession, ...prev.map(session => ({
+          ...session,
+          isActive: false
+        }))]);
+
+        // Set as current session
+        setCurrentSession(newSession);
+        setMessages([]);
+
+        // Close mobile drawer if needed
+        if (isMobile) {
+          setIsDrawerOpen(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error creating new chat:', error);
+      setError('Failed to create new chat session');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteSession = async (sessionId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetchWithErrorHandling(
+        `${apiUrl}/v1/visitor/session/${sessionId}`,
+        { method: 'DELETE' }
+      );
+
+      if (response.success) {
+        // Remove session from list
+        setSessions(prev => prev.filter(session => session.sessionId !== sessionId));
+
+        // If the deleted session was the current one, switch to the most recent session or clear messages
+        if (currentSession?.sessionId === sessionId) {
+          const remainingSessions = sessions.filter(session => session.sessionId !== sessionId);
+          if (remainingSessions.length > 0) {
+            const newCurrentSession = remainingSessions[0];
+            setCurrentSession(newCurrentSession);
+            setMessages(newCurrentSession.messages);
+          } else {
+            setCurrentSession(null);
+            setMessages([]);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting session:', error);
+      setError('Failed to delete chat session');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      sendMessage();
+      sendMessage(message);
     }
   };
 
-  const drawer = (
-    <Box sx={{ width: 250 }}>
-      <Box sx={{ 
-        p: 2, 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'space-between'
-      }}>
-        <Typography variant="h6">Chat History</Typography>
-        {isMobile && (
-          <IconButton onClick={() => setIsDrawerOpen(false)}>
-            <CloseIcon />
-          </IconButton>
-        )}
-      </Box>
-      <List>
-        <ListItem>
-          <ListItemText 
-            primary="New Chat" 
-            secondary={new Date().toLocaleDateString()} 
-          />
-        </ListItem>
-      </List>
-    </Box>
-  );
+  const handleSignOut = () => {
+    localStorage.removeItem('visitorEmail');
+    setEmail('');
+    setIsAuthenticated(false);
+    setShowEmailModal(true);
+    setIsFirstVisit(true);
+    setSessions([]);
+    setMessages([]);
+  };
+
+  const handleSignIn = () => {
+    setShowEmailModal(true);
+  };
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      scrollToBottom();
+    }
+  }, [messages]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   return (
-    <Box sx={{ 
-      height: '100vh',
-      display: 'flex',
-      backgroundColor: theme.palette.mode === 'dark' ? '#343541' : '#ffffff'
-    }}>
-      {/* Sidebar */}
-      {!isMobile && (
-        <Drawer
-          variant="permanent"
-          sx={{
-            width: 250,
-            flexShrink: 0,
-            '& .MuiDrawer-paper': {
-              width: 250,
-              boxSizing: 'border-box',
-              backgroundColor: theme.palette.mode === 'dark' ? '#202123' : '#f7f7f8',
-            },
-          }}
-        >
-          {drawer}
-        </Drawer>
-      )}
-
-      {/* Mobile Drawer */}
-      <Drawer
-        variant="temporary"
-        open={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
-        ModalProps={{
-          keepMounted: true,
+    <Box sx={{ display: 'flex', height: '100vh' }}>
+      <EmailModal 
+        open={showEmailModal && (isFirstVisit || !isAuthenticated)}
+        onClose={() => {
+          if (!email || !isAuthenticated) {
+            return;
+          }
+          setShowEmailModal(false);
         }}
+        onSubmit={handleEmailSubmit}
+      />
+      
+      <Box
         sx={{
-          display: { xs: 'block', sm: 'none' },
-          '& .MuiDrawer-paper': {
-            width: 250,
-            backgroundColor: theme.palette.mode === 'dark' ? '#202123' : '#f7f7f8',
-          },
+          position: 'absolute',
+          top: 16,
+          right: 16,
+          zIndex: 1000,
         }}
       >
-        {drawer}
-      </Drawer>
-
-      {/* Main Chat Area */}
-      <Box sx={{ 
-        flex: 1, 
-        display: 'flex', 
-        flexDirection: 'column',
-        height: '100vh',
-        position: 'relative'
-      }}>
-        {/* Mobile Header */}
-        {isMobile && (
-          <Box sx={{ 
-            p: 1, 
-            borderBottom: 1, 
-            borderColor: 'divider',
-            display: 'flex',
-            alignItems: 'center'
-          }}>
-            <IconButton onClick={() => setIsDrawerOpen(true)}>
-              <MenuIcon />
-            </IconButton>
-            <Typography variant="h6" sx={{ ml: 2 }}>Chat</Typography>
+        {isAuthenticated ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              {email}
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={handleSignOut}
+              sx={{ ml: 1 }}
+            >
+              Sign Out
+            </Button>
           </Box>
+        ) : (
+          <Button
+            variant="contained"
+            size="small"
+            onClick={handleSignIn}
+          >
+            Sign In
+          </Button>
         )}
+      </Box>
 
-        {/* Messages */}
-        <Box sx={{ 
-          flex: 1, 
-          overflowY: 'auto',
-          p: 3,
+      <ChatHistorySidebar
+        open={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        sessions={sessions}
+        currentSessionId={currentSession?._id || ''}
+        onSessionSelect={handleSessionSelect}
+        onNewChat={handleNewChat}
+        onDeleteSession={handleDeleteSession}
+      />
+      
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          height: '100vh',
           display: 'flex',
           flexDirection: 'column',
-          gap: 3
+          bgcolor: 'background.default'
+        }}
+      >
+        <Box sx={{ 
+          p: 2, 
+          display: 'flex', 
+          alignItems: 'center',
+          borderBottom: 1,
+          borderColor: 'divider',
+          bgcolor: 'background.paper'
         }}>
-          {messages.map((msg, index) => (
-            <Box
-              key={index}
-              sx={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 2,
-                backgroundColor: 'transparent',
-                py: msg.isUser ? 0 : 4,
-                px: { xs: 2, sm: 4, md: 8, lg: 12 },
-                borderBottom: 'none',
-                justifyContent: msg.isUser ? 'flex-end' : 'flex-start',
-                maxWidth: '100%'
-              }}
+          {isMobile && (
+            <IconButton 
+              edge="start" 
+              onClick={() => setIsDrawerOpen(true)}
+              sx={{ mr: 2 }}
             >
-              {!msg.isUser && (
-                <Box
-                  sx={{
-                    width: 30,
-                    height: 30,
-                    borderRadius: '50%',
-                    backgroundColor: '#19C37D',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white',
-                    flexShrink: 0
-                  }}
-                >
-                  <SmartToyIcon />
-                </Box>
-              )}
-              <Typography
-                sx={{
-                  maxWidth: '70%',
-                  whiteSpace: 'pre-wrap',
-                  overflowWrap: 'break-word',
-                  fontSize: '1rem',
-                  lineHeight: 1.7,
-                  backgroundColor: msg.isUser ? (theme.palette.mode === 'dark' ? '#40414F' : '#f0f0f0') : 'transparent',
-                  padding: msg.isUser ? '9px 25px' : 0,
-                  borderRadius: msg.isUser ? '20px' : 0,
-                }}
-              >
-                {msg.text}
+              <MenuIcon />
+            </IconButton>
+          )}
+          <Typography variant="h6" noWrap>
+            Chat Session
+          </Typography>
+        </Box>
+
+        <Box sx={{ 
+          flex: 1,
+          p: 2,
+          overflow: 'auto',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          {messages.length === 0 ? (
+            <Box sx={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'text.secondary',
+              gap: 2
+            }}>
+              <ChatBubbleOutlineIcon sx={{ fontSize: 48, opacity: 0.5 }} />
+              <Typography variant="h6">
+                No messages yet
+              </Typography>
+              <Typography variant="body2">
+                Start a conversation by typing a message below
               </Typography>
             </Box>
-          ))}
+          ) : (
+            messages.map((msg, index) => (
+              <Box
+                key={index}
+                sx={{
+                  display: 'flex',
+                  justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                  mb: 2,
+                }}
+              >
+                {msg.role === 'assistant' && (
+                  <Avatar sx={{ mr: 1, bgcolor: 'primary.main' }}>
+                    <SmartToyIcon />
+                  </Avatar>
+                )}
+                <Box
+                  sx={{
+                    maxWidth: '70%',
+                    p: 2,
+                    bgcolor: msg.role === 'user' ? 'primary.light' : 'background.paper',
+                    color: msg.role === 'user' ? 'primary.contrastText' : 'text.primary',
+                    borderRadius: 2,
+                    ...(msg.role === 'user' 
+                      ? { borderTopRightRadius: 0 }
+                      : { borderTopLeftRadius: 0 }
+                    ),
+                    boxShadow: 1
+                  }}
+                >
+                  <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+                    {msg.content}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                    {msg.timestamp}
+                  </Typography>
+                </Box>
+                {msg.role === 'user' && (
+                  <Avatar sx={{ ml: 1, bgcolor: 'secondary.main' }}>
+                    <PersonIcon />
+                  </Avatar>
+                )}
+              </Box>
+            ))
+          )}
           <div ref={messagesEndRef} />
         </Box>
 
-        {/* Input Area */}
-        <Box sx={{ 
-          p: { xs: 2, sm: 3 },
-          backgroundColor: 'transparent',
-          position: 'relative'
-        }}>
+        <Box
+          component="form"
+          onSubmit={(e) => e.preventDefault()}
+          sx={{
+            p: 2,
+            borderTop: 1,
+            borderColor: 'divider',
+            bgcolor: 'background.paper'
+          }}
+        >
           <Box sx={{ 
-            maxWidth: '800px', 
-            margin: '0 auto',
-            position: 'relative',
-            boxShadow: theme.palette.mode === 'dark' 
-              ? '0 0 15px rgba(0,0,0,0.2)' 
-              : '0 0 15px rgba(0,0,0,0.1)',
-            borderRadius: '12px',
+            display: 'flex',
+            gap: 1,
+            maxWidth: 'md',
+            mx: 'auto'
           }}>
             <TextField
               fullWidth
-              multiline
-              maxRows={4}
+              name="message"
+              placeholder="Type a message..."
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Type a message..."
-              variant="outlined"
+              disabled={loading}
               sx={{
                 '& .MuiOutlinedInput-root': {
-                  backgroundColor: theme.palette.mode === 'dark' ? '#40414F' : '#ffffff',
-                  borderRadius: '12px',
-                  pr: 5,
-                  '& fieldset': {
-                    border: 'none'
-                  },
-                  '&:hover fieldset': {
-                    border: 'none'
-                  },
-                  '&.Mui-focused fieldset': {
-                    border: 'none'
-                  }
+                  borderRadius: 3
                 }
               }}
             />
-            <IconButton
-              onClick={sendMessage}
-              disabled={!message.trim()}
-              sx={{
-                position: 'absolute',
-                right: 8,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: message.trim() ? 'primary.main' : 'text.disabled'
+            <IconButton 
+              type="submit" 
+              disabled={loading || !message}
+              color="primary"
+              sx={{ 
+                p: 1,
+                bgcolor: 'primary.main',
+                color: 'primary.contrastText',
+                '&:hover': {
+                  bgcolor: 'primary.dark'
+                },
+                '&.Mui-disabled': {
+                  bgcolor: 'action.disabledBackground',
+                  color: 'action.disabled'
+                }
               }}
+              onClick={() => sendMessage(message)}
             >
-              <SendIcon />
+              {loading ? <CircularProgress size={24} color="inherit" /> : <SendIcon />}
             </IconButton>
           </Box>
         </Box>
