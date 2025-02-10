@@ -1,0 +1,55 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  bots      Bot[]
+}
+
+model BotModel {
+  id          String   @id @default(uuid())
+  name        String
+  description String
+  provider    String   // e.g., "openai", "anthropic"
+  modelName   String   // e.g., "gpt-3.5-turbo", "gpt-4"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  bots        Bot[]
+}
+
+model Bot {
+  id             String        @id @default(uuid())
+  name           String
+  description    String
+  welcomeMessage String?
+  widgetScript   String?
+  fullScreenLink String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  userId         String
+  modelId        String
+  user           User          @relation(fields: [userId], references: [id])
+  model          BotModel      @relation(fields: [modelId], references: [id])
+  documents      BotDocument[]
+}
+
+model BotDocument {
+  id        String   @id @default(uuid())
+  content   String
+  metadata  Json
+  botId     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  bot       Bot      @relation(fields: [botId], references: [id])
+}
